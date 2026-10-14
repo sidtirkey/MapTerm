@@ -4,11 +4,12 @@ A network topology map you work from. Draw your devices and links, then click a 
 open an SSH terminal, record sessions, and run commands across many devices with a safety
 check for configuration changes.
 
-![MapTerm demo: drawing a link, opening an SSH session that enters enable mode by itself, then running a configuration change on three devices, tested on one device first](docs/demo.gif)
+![MapTerm demo: saving a credential set to the Keychain, drawing a link, recording an SSH session that enters enable mode by itself, then running a configuration change on three devices, tested on one device first](docs/demo.gif)
 
-*In the demo: draw a link with interface names, open SSH to R1 (its credential set logs in
-and enters enable mode), then run a change on three devices: MapTerm asks for confirmation,
-tests on R1 first, and continues on the rest when told to.*
+*In the demo: save a credential set (its passwords go to the macOS Keychain) and give it to R1;
+draw a link with interface names; open SSH to R1, which logs in and enters enable mode by itself,
+and record the session; then run a change on three devices. MapTerm asks for confirmation, tests
+on R1 first, and continues on the rest when told to.*
 
 ## Features
 
