@@ -123,4 +123,13 @@ docs/                screenshot
 
 ## License
 
-MapTerm is released under the [MIT License](LICENSE).
+Copyright (C) 2026 Siddharth Kumar Tirkey
+
+MapTerm is free software: you can redistribute it and/or modify it under the terms of the
+[GNU Affero General Public License, version 3](LICENSE) (AGPL-3.0-only), as published by
+the Free Software Foundation. It is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; see the license for details.
+
+In short: you can use MapTerm freely, including at work. If you give a modified version to
+others, or let others use a modified version over a network, you must make your modified
+source code available to them under the same license.
