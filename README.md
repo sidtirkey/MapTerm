@@ -21,23 +21,41 @@ check for configuration changes.
   one file per device or one file per command. Commands that may change a device need a typed
   confirmation and can be tested on one device first.
 
-## Requirements
+## Desktop app
 
-- [Node.js](https://nodejs.org) 18 or newer
-- macOS, Windows or Linux
+Download the installer for your system from the project's **Releases** page:
+
+| OS | File |
+|---|---|
+| macOS (Apple Silicon / Intel) | `MapTerm-<version>-arm64.dmg` / `MapTerm-<version>.dmg` |
+| Windows | `MapTerm Setup <version>.exe` |
+| Linux | `MapTerm-<version>.AppImage` (make it executable, then run it) |
+
+The installers are not yet signed with Apple or Microsoft certificates, so the first launch
+shows a warning:
+
+- **macOS:** open the app once, then go to *System Settings → Privacy & Security* and choose
+  **Open Anyway** (on older macOS: right-click the app and choose **Open**).
+- **Windows:** in the SmartScreen message, choose **More info → Run anyway**.
+
+The app keeps its data in the same folder as `npm start` (see [Where data is kept](#where-data-is-kept)),
+so both share the same map and settings.
+
+## Running from source
+
+Requires [Node.js](https://nodejs.org) 18 or newer, on macOS, Windows or Linux.
 
 On a Linux desktop, install `zenity` (or use KDE's `kdialog`) for the folder chooser, and
 `libsecret-tools` to keep passwords in the system keyring. Without them MapTerm still works:
 you type folder paths, and passwords are kept until MapTerm stops.
 
-## Getting started
-
 ```bash
 npm install
-npm start
+npm start          # in your browser at http://127.0.0.1:3000
+npm run app        # or as the desktop app
 ```
 
-Open <http://127.0.0.1:3000>, choose **Add node** and click the map to place a device.
+Choose **Add node** and click the map to place a device.
 
 | Setting | Default | Purpose |
 |---|---|---|
@@ -81,7 +99,12 @@ npm run dev            # restart automatically when server files change
 npm test               # unit and API tests (Node's built-in test runner)
 npm run devices:up     # start the test devices (needs Docker)
 npm run devices:down   # stop them
+npm run dist:mac       # build installers into dist/ (also dist:win, dist:linux)
 ```
+
+To release, push a version tag (`git tag v1.0.0 && git push --tags`). The
+[Build installers](.github/workflows/release.yml) workflow then builds the macOS, Windows
+and Linux installers on GitHub and attaches them to a draft release for you to publish.
 
 The test devices in [dev/test-devices](dev/test-devices) are SSH containers on
 `127.0.0.1`. Ports 2221–2223 are Linux shells; port 2224 (`R1`) imitates a Cisco IOS
@@ -91,6 +114,8 @@ with `admin` / `admin`; the enable password is `cisco`.
 ### Project layout
 
 ```
+electron/main.js     desktop app: runs the server and shows the page in a window
+build/               app icon (icon.svg is the source of icon.png)
 src/
   server/            Node.js server
     index.js         entry point (npm start)

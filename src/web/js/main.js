@@ -7,7 +7,7 @@ import { initSessions, sessions, activeId } from './sessions.js';
 import { isRecKey, toggleRec } from './recording.js';
 import { initSettings } from './settings.js';
 import { initCredentials } from './credentials.js';
-import { initRun } from './run.js';
+import { initRun, runInProgress } from './run.js';
 
 initMap();
 initLinks();
@@ -15,6 +15,12 @@ initSessions();
 initSettings();
 initCredentials();
 initRun();
+
+// Closing or reloading the page would end open SSH sessions and a running command run, so
+// ask first (the desktop app shows its own dialog for this; browsers show "Leave site?").
+window.addEventListener('beforeunload', (e) => {
+  if ([...sessions.values()].some((s) => s.status !== 'dead') || runInProgress()) { e.preventDefault(); e.returnValue = ''; }
+});
 
 // Page-wide keys: Ctrl+Shift+L toggles recording of the active tab; Escape closes the
 // top-most dialog, or leaves link-drawing / device-picking mode.

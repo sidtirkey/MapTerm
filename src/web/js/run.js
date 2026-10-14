@@ -13,6 +13,8 @@ let run = null; // the current or last run: { ws, done, dir }
 const lastCommands = remembered('commands'), lastLayout = remembered('layout'), lastCred = remembered('cred');
 const LAYOUTS = { device: 'One file per device', command: 'One file per command (a folder per device)' };
 
+export const runInProgress = () => !!run && !run.done;
+
 export function updatePickbar() {
   const n = cy.nodes('.chosen').length;
   $('#pickcount').textContent = `${plural(n, 'device')} selected`;

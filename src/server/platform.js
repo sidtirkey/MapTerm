@@ -8,11 +8,17 @@ import { expandHome } from './files.js';
 
 let picking = false;
 
+// The desktop app (electron/main.js) supplies its own native dialogs, which work the same on
+// every OS; the command-line tools below are used when MapTerm runs with `npm start`.
+let native = null;
+export function useNativeDialogs(dialogs) { native = dialogs; }
+
 // Resolves to { ok, path } | { ok: false, cancelled } | { ok: false, error }.
 export function pickFolder({ purpose, start }) {
   const prompt = purpose === 'run' ? 'Choose a folder for MapTerm command results' : 'Choose a folder for MapTerm session logs';
   start = expandHome(String(start || ''));
   if (!start || !fs.existsSync(start)) start = os.homedir();
+  if (native) return native.pickFolder({ title: prompt, start });
   // Candidates per platform, tried in order until one is installed. The prompt and start
   // folder reach PowerShell through environment variables, never through the script text.
   const pickers = {
@@ -50,6 +56,7 @@ export function pickFolder({ purpose, start }) {
 export function openFolder(dir) {
   dir = String(dir || '');
   if (!path.isAbsolute(dir) || !fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return Promise.resolve({ ok: false, error: 'Folder not found.' });
+  if (native) return native.openFolder(dir);
   const opener = { darwin: 'open', win32: 'explorer.exe' }[process.platform] || 'xdg-open';
   // explorer.exe exits with 1 even when it worked, so only a missing program counts as failure.
   return new Promise((resolve) => execFile(opener, [dir], (err) => resolve(err && err.code === 'ENOENT'

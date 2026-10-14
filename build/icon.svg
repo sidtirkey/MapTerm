@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- MapTerm app icon: two linked devices above a terminal prompt. Source for build/icon.png. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d2530"/>
+      <stop offset="1" stop-color="#0f1318"/>
+    </linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)"/>
+  <path d="M330 370H694" stroke="#8794a5" stroke-width="34" stroke-linecap="round"/>
+  <circle cx="310" cy="370" r="92" fill="#2a56d6"/>
+  <circle cx="714" cy="370" r="92" fill="#0f9d73"/>
+  <path d="M272 600l112 84-112 84" fill="none" stroke="#d7dde6" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M470 768H752" stroke="#d7dde6" stroke-width="56" stroke-linecap="round"/>
+</svg>

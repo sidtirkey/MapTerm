@@ -6,13 +6,18 @@
   "author": "Siddharth Kumar Tirkey",
   "private": true,
   "type": "module",
-  "main": "src/server/index.js",
+  "main": "electron/main.js",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
     "start": "node src/server/index.js",
     "dev": "node --watch src/server/index.js",
+    "app": "electron .",
+    "dist": "electron-builder",
+    "dist:mac": "electron-builder --mac",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
     "test": "node --test",
     "devices:up": "docker compose -f dev/test-devices/docker-compose.yml up -d",
     "devices:down": "docker compose -f dev/test-devices/docker-compose.yml down"
@@ -24,5 +29,66 @@
     "express": "^4.19.2",
     "ssh2": "^1.16.0",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "44.7.2",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.mapterm.app",
+    "productName": "MapTerm",
+    "copyright": "Copyright (C) 2026 Siddharth Kumar Tirkey",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**",
+      "src/**",
+      "LICENSE",
+      "package.json",
+      "!node_modules/cpu-features/**",
+      "!node_modules/buildcheck/**",
+      "!node_modules/nan/**"
+    ],
+    "npmRebuild": false,
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "identity": "-"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Network"
+    }
   }
 }
