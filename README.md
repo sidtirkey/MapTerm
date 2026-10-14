@@ -4,7 +4,11 @@ A network topology map you work from. Draw your devices and links, then click a 
 open an SSH terminal, record sessions, and run commands across many devices with a safety
 check for configuration changes.
 
-![MapTerm: a topology map with an SSH session to R1 open in the dock](docs/screenshot.png)
+![MapTerm demo: drawing a link, opening an SSH session that enters enable mode by itself, then running a configuration change on three devices, tested on one device first](docs/demo.gif)
+
+*In the demo: draw a link with interface names, open SSH to R1 (its credential set logs in
+and enters enable mode), then run a change on three devices: MapTerm asks for confirmation,
+tests on R1 first, and continues on the rest when told to.*
 
 ## Features
 
@@ -143,7 +147,7 @@ src/
     js/credentials.js, settings.js, dialog.js, icons.js, dom.js
 test/                tests (npm test)
 dev/test-devices/    Docker test devices
-docs/                screenshot
+docs/                demo GIF for this README
 ```
 
 ## License
