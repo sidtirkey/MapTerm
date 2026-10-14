@@ -1,0 +1,44 @@
+# Fake SSH "devices" for testing MapTerm locally.
+#   Start:  npm run devices:up
+#   Stop:   npm run devices:down
+# Login: admin / admin. Ports are bound to 127.0.0.1 only.
+# R1 (port 2224) imitates a Cisco IOS CLI; its enable password is "cisco".
+
+x-device: &device
+  image: lscr.io/linuxserver/openssh-server:latest
+  restart: unless-stopped
+  environment:
+    PUID: "1000"
+    PGID: "1000"
+    TZ: Etc/UTC
+    PASSWORD_ACCESS: "true"
+    USER_NAME: admin
+    USER_PASSWORD: admin
+
+services:
+  nmcore11:
+    <<: *device
+    hostname: nmcore11
+    container_name: mapterm-nmcore11
+    ports: ["127.0.0.1:2221:2222"]
+
+  nmcore12:
+    <<: *device
+    hostname: nmcore12
+    container_name: mapterm-nmcore12
+    ports: ["127.0.0.1:2222:2222"]
+
+  sw:
+    <<: *device
+    hostname: sw
+    container_name: mapterm-sw
+    ports: ["127.0.0.1:2223:2222"]
+
+  R1:
+    <<: *device
+    hostname: R1
+    container_name: mapterm-r1
+    ports: ["127.0.0.1:2224:2222"]
+    volumes:
+      - ./fake-ios.sh:/fake-ios.sh:ro
+      - ./fake-ios-init.sh:/custom-cont-init.d/fake-ios-init.sh:ro
