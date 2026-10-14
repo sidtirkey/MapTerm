@@ -120,3 +120,7 @@ test/                tests (npm test)
 dev/test-devices/    Docker test devices
 docs/                screenshot
 ```
+
+## License
+
+MapTerm is released under the [MIT License](LICENSE).

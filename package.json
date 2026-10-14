@@ -2,6 +2,8 @@
   "name": "mapterm",
   "version": "1.0.0",
   "description": "Network topology map you work from: SSH terminals, session recording and guarded multi-device commands",
+  "license": "MIT",
+  "author": "Siddharth Kumar Tirkey",
   "private": true,
   "type": "module",
   "main": "src/server/index.js",
