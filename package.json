@@ -1,0 +1,26 @@
+{
+  "name": "mapterm",
+  "version": "1.0.0",
+  "description": "Network topology map you work from: SSH terminals, session recording and guarded multi-device commands",
+  "private": true,
+  "type": "module",
+  "main": "src/server/index.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/server/index.js",
+    "dev": "node --watch src/server/index.js",
+    "test": "node --test",
+    "devices:up": "docker compose -f dev/test-devices/docker-compose.yml up -d",
+    "devices:down": "docker compose -f dev/test-devices/docker-compose.yml down"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "cytoscape": "^3.30.0",
+    "express": "^4.19.2",
+    "ssh2": "^1.16.0",
+    "ws": "^8.18.0"
+  }
+}

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MapTerm</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/vendor/xterm/css/xterm.css">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div id="app">
+  <div id="bar">
+    <b>MapTerm</b>
+    <button id="bSel" class="on">Select</button>
+    <button id="bAdd">Add node</button>
+    <button id="bRun" title="Run commands on several devices and save the output">Run commands</button>
+    <button id="bCreds" title="Saved usernames, passwords, SSH keys and enable passwords">Credentials</button>
+    <button id="bLogs" title="Folder where session recordings are saved">Log folder</button>
+    <span id="hint"></span>
+  </div>
+  <div id="stage">
+    <div id="cy"></div>
+    <div id="empty"><div><p class="title">No devices yet</p><p>Choose Add node, then click the map to place a device.</p></div></div>
+    <div id="menu"></div>
+    <div id="pickbar"><span id="pickcount"></span><button id="pAll">Select all</button><button id="pClear">Clear</button><button id="pCancel">Cancel</button><button id="pNext" class="ok">Next</button></div>
+    <div id="runpanel" role="status"><div id="runhead"><b id="runtitle"></b><button id="runX" title="Hide (the run keeps going)">&times;</button></div>
+      <div id="rundir"></div><ul id="runlist"></ul><p id="runnote"></p>
+      <div id="runbtns"><button id="runStop">Stop</button><button id="runOpen">Open folder</button><button id="runGo" class="ok">Continue</button></div></div>
+  </div>
+  <div id="dock">
+    <div id="grip"></div>
+    <div id="dockhead"><div id="tabs"></div><button id="bMin" title="Minimize or restore">&#8211;</button></div>
+    <div id="panes"></div>
+  </div>
+</div>
+
+<div id="credmodal" role="dialog" aria-labelledby="credtitle"><div id="credbox"><h3 id="credtitle">Credentials</h3><p id="credstore"></p>
+  <ul id="credlist"></ul><div id="credbtns"><button type="button" id="credClose">Done</button><button type="button" id="credAdd" class="ok">Add credential set</button></div></div></div>
+
+<div id="modal"><form id="mbox"><h3 id="mtitle"></h3><p id="mnote"></p><div id="mfields"></div>
+  <div id="mbtns"><button type="button" id="mCancel">Cancel</button><button type="submit" class="ok" id="mOk">OK</button></div></form></div>
+
+<!-- Libraries (globals: cytoscape, Terminal, FitAddon), then the app as ES modules. -->
+<script src="/vendor/cy/cytoscape.min.js"></script>
+<script src="/vendor/xterm/lib/xterm.js"></script>
+<script src="/vendor/fit/lib/addon-fit.js"></script>
+<script type="module" src="/js/main.js"></script>
+</body>
+</html>

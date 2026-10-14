@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- MapTerm: two linked devices above a terminal prompt -->
+  <rect width="64" height="64" rx="12" fill="#12161c"/>
+  <path d="M19 20H45" stroke="#8794a5" stroke-width="3"/>
+  <circle cx="17" cy="20" r="7" fill="#2a56d6"/>
+  <circle cx="47" cy="20" r="7" fill="#0f9d73"/>
+  <path d="M14 38l8 6-8 6" fill="none" stroke="#d7dde6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M28 50H48" stroke="#d7dde6" stroke-width="4" stroke-linecap="round"/>
+</svg>
