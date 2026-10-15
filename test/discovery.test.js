@@ -73,3 +73,55 @@ test('a failed login is reported as the error', async () => {
   assert.match(r.error, /login was rejected/);
   assert.deepEqual(r.neighbors, []);
 });
+
+/* ---------- telling devices apart (serial numbers first) ---------- */
+
+const nb = (name, { serials = [], macs = [], names = [], ips = [] } = {}) => ({
+  name, addresses: ips.map((ip) => ({ ip, kind: 'management' })), links: [{ localIf: 'Gi0/1', remoteIf: 'Gi0/1' }],
+  identity: { serials, macs, chassisIds: [], names },
+});
+const src = { id: 'src', name: 'R1' };
+const result = (neighbor, nodes) => matchToMap([neighbor], { nodes: [src, ...nodes], edges: [] }, 'src')[0];
+
+test('the same serial number identifies a device even after it was renamed and readdressed', () => {
+  const r = result(nb('R2', { serials: ['FGL1'], ips: ['10.0.0.2'] }), [{ id: 'n', name: 'Branch router', host: '172.16.0.2', identity: { serials: ['FGL1'] } }]);
+  assert.deepEqual(r.match, { id: 'n', by: 'serial', certain: true });
+});
+
+test('the same MAC / chassis ID identifies a device', () => {
+  const r = result(nb('core', { macs: ['00aabbcc0003'] }), [{ id: 'n', name: 'Core Switch 1', identity: { macs: ['00aabbcc0003'] } }]);
+  assert.deepEqual(r.match, { id: 'n', by: 'mac', certain: true });
+});
+
+test('a remembered full name or address identifies a renamed device', () => {
+  const byName = result(nb('R2', { names: ['r2.lab.local'] }), [{ id: 'n', name: 'Branch router', host: '127.0.0.1', identity: { names: ['r2.lab.local'] } }]);
+  assert.deepEqual(byName.match, { id: 'n', by: 'name', certain: true });
+  const byAddr = result(nb('R2', { ips: ['10.0.0.2'] }), [{ id: 'n', name: 'Branch router', host: '127.0.0.1', identity: { addresses: ['10.0.0.2'] } }]);
+  assert.deepEqual(byAddr.match, { id: 'n', by: 'address', certain: true });
+});
+
+test('different serial numbers mean different devices, even with the same name', () => {
+  const r = result(nb('sw1', { serials: ['FDO2222BBBB'], names: ['sw1.siteb.example.com'] }), [{ id: 'a', name: 'sw1', host: '10.1.0.1', identity: { serials: ['FDO1111AAAA'] } }]);
+  assert.equal(r.match, null);
+  assert.equal(r.clash, 'a', 'reported as a different device with the same name');
+});
+
+test('the same short name only is a probable match for the user to confirm', () => {
+  const r = result(nb('R2'), [{ id: 'n', name: 'R2', host: '127.0.0.1' }]);
+  assert.deepEqual(r.match, { id: 'n', by: 'short-name', certain: false });
+});
+
+test('several devices with the same name: no guess, the user chooses', () => {
+  const r = result(nb('sw1'), [{ id: 'a', name: 'sw1', host: '10.1.0.1' }, { id: 'b', name: 'sw1', host: '10.2.0.1' }]);
+  assert.equal(r.match, null);
+  assert.deepEqual(r.candidates, ['a', 'b']);
+});
+
+test('a device listing itself as a neighbor is left out, recognised by its own serial number', async () => {
+  const version = 'R1 uptime is 1 week\nProcessor board ID FTX9999SELF';
+  const cdp = '-------------------------\nDevice ID:R1(FTX9999SELF)\nPlatform: N9K, Capabilities: Router Switch\nInterface: Ethernet1/1, Port ID (outgoing port): Ethernet1/2\n'
+    + '-------------------------\nDevice ID:R2(FTX1111R2R2)\nPlatform: N9K, Capabilities: Router Switch\nInterface: Ethernet1/3, Port ID (outgoing port): Ethernet1/1\n';
+  const r = await discover({ 'show version': version, 'show cdp neighbors detail': cdp, 'show lldp neighbors detail': '% LLDP is not enabled' });
+  assert.deepEqual(r.self.serials, ['FTX9999SELF']);
+  assert.deepEqual(r.neighbors.map((n) => n.name), ['R2']);
+});

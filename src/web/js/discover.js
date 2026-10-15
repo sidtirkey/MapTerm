@@ -83,6 +83,8 @@ function showResult(source, r) {
     $('#discraw').hidden = false;
   }
   if (r.error) return setStatus(`Discovery failed: ${r.error}`, { error: true });
+  // What the device said about itself (serial number, MAC) identifies it in later discoveries.
+  if (r.self && (r.self.serials.length || r.self.macs.length)) { remember(source, r.self); save(); }
   const protocols = `CDP ${PROTOCOL_STATE[r.protocols.cdp] || '?'} · LLDP ${PROTOCOL_STATE[r.protocols.lldp] || '?'}`;
   if (!r.neighbors.length) return setStatus(`No neighbors found. ${protocols}.`);
   setStatus(`${plural(r.neighbors.length, 'neighbor')} found (${protocols}). Tick what to add; network devices are ticked.`);
@@ -99,42 +101,65 @@ function showResult(source, r) {
   updateCount();
 }
 
-// One review row: tick box, name, type, links, management address, platform.
+/* ---------- device identity (serial numbers, MACs, full names, addresses) ---------- */
+
+const ID_KEYS = ['serials', 'macs', 'chassisIds', 'names', 'addresses'];
+const identityOf = (nb) => ({ ...nb.identity, addresses: nb.addresses.map((a) => a.ip) });
+// Adds what was learned about a device to what it already remembers.
+function remember(node, learned) {
+  const known = node.data('identity') || {}, merged = {};
+  for (const k of ID_KEYS) { const v = [...new Set([...(known[k] || []), ...(learned[k] || [])])]; if (v.length) merged[k] = v; }
+  node.data('identity', merged);
+}
+
+const MATCH_REASON = { serial: 'same serial number', mac: 'same MAC address', name: 'same name', address: 'same address', 'short-name': 'same name' };
+const nodeById = (id) => { const n = id ? cy.getElementById(id) : null; return n && n.nonempty() ? n : null; };
+const describe = (n) => `${n.data('name')}${n.data('host') ? ` (${n.data('host')})` : ''}`;
+// Whether a link already joins the source device and the target with these interfaces.
+const drawn = (source, target, l) => source.edgesWith(target).some((e) =>
+  (e.source().same(source) && e.data('srcIf') === l.localIf && e.data('dstIf') === l.remoteIf)
+  || (e.source().same(target) && e.data('srcIf') === l.remoteIf && e.data('dstIf') === l.localIf));
+
+// One review row: tick box, name (or which map device it is), type, links, management
+// address, platform. The row's target is either a device already on the map or a new one:
+//   - same serial / MAC / full name / address  -> "On the map as X" (certain)
+//   - same short name only, or several possible devices -> a choice: link to one, or add as new
 function makeRow(source, nb) {
-  const existing = nb.onMap ? cy.getElementById(nb.onMap) : null;
-  const newLinks = nb.links.filter((l) => !l.onMap);
   const el = document.createElement('div');
   el.className = 'row';
-  const tick = Object.assign(document.createElement('input'), { type: 'checkbox', checked: nb.isNetworkDevice && (!existing || newLinks.length > 0) });
-  tick.disabled = !!existing && !newLinks.length;
+  const tick = Object.assign(document.createElement('input'), { type: 'checkbox' });
   tick.setAttribute('aria-label', `Add ${nb.name}`);
 
   const nameCell = document.createElement('div');
   const name = Object.assign(document.createElement('input'), { type: 'text', value: nb.name });
-  nameCell.append(name);
-  if (existing) {
-    name.disabled = true;
-    nameCell.append(Object.assign(document.createElement('span'), { className: 'onmap', textContent: `On the map as ${existing.data('name')}` }));
+  const note = Object.assign(document.createElement('span'), { className: 'sub' });
+  let choice = null; // a select when the user decides which device this is
+  const certain = nb.match?.certain ? nodeById(nb.match.id) : null;
+  const options = [...new Set([...(nb.match && !nb.match.certain ? [nb.match.id] : []), ...(nb.candidates || [])])].map(nodeById).filter(Boolean);
+  if (certain) {
+    nameCell.append(Object.assign(document.createElement('span'), { className: 'onmap', textContent: `On the map as ${certain.data('name')}`, title: MATCH_REASON[nb.match.by] }));
+  } else if (options.length) {
+    choice = document.createElement('select');
+    choice.className = 'choice';
+    options.forEach((n) => choice.add(new Option(`Same as ${describe(n)}`, n.id())));
+    choice.add(new Option('A different device: add it', 'new'));
+    // One device with the same name: probably that one. Several: let the user pick.
+    choice.value = nb.match && !nb.match.certain ? nb.match.id : 'new';
+    nameCell.append(choice);
   }
+  nameCell.prepend(name);
+  nameCell.append(note);
 
   const type = document.createElement('select');
   Object.entries(DEVICE_TYPES).forEach(([k, t]) => type.add(new Option(t.label, k)));
   type.value = DEVICE_TYPES[nb.type] ? nb.type : 'switch';
-  type.disabled = !!existing;
-
   const links = document.createElement('div');
   links.className = 'links';
-  for (const l of nb.links) {
-    const line = Object.assign(document.createElement('div'), { textContent: `${l.localIf || '?'} ↔ ${l.remoteIf || '?'}` });
-    if (l.onMap) { line.className = 'drawn'; line.title = 'Already drawn'; }
-    links.append(line);
-  }
 
   // A text box with the discovered addresses as suggestions; any address (or address:port) can be typed.
   const mgmtCell = document.createElement('div');
   const mgmt = Object.assign(document.createElement('input'), { type: 'text', value: nb.managementIp, placeholder: 'IP or hostname' });
-  if (existing) { mgmt.value = existing.data('host') || ''; mgmt.disabled = true; }
-  else if (nb.addresses.length) {
+  if (nb.addresses.length) {
     const list = document.createElement('datalist');
     list.id = `addr-${uid()}`;
     nb.addresses.forEach((a) => list.append(new Option(`${a.ip} (${a.kind})`, a.ip)));
@@ -144,21 +169,53 @@ function makeRow(source, nb) {
   mgmtCell.prepend(mgmt);
 
   const platform = Object.assign(document.createElement('div'), { textContent: nb.platform || '—' });
-  platform.append(Object.assign(document.createElement('span'), { className: 'sub', textContent: `via ${nb.via.join(' + ').toUpperCase()}` }));
+  const serial = nb.identity.serials[0] ? ` · S/N ${nb.identity.serials[0]}` : '';
+  platform.append(Object.assign(document.createElement('span'), { className: 'sub', textContent: `via ${nb.via.join(' + ').toUpperCase()}${serial}` }));
 
+  const row = { nb, el, tick, name, type, mgmt };
+  // The map device this row stands for, or null for a new device.
+  row.target = () => certain || (choice && choice.value !== 'new' ? nodeById(choice.value) : null);
+  row.newLinks = () => { const t = row.target(); return t ? nb.links.filter((l) => !drawn(source, t, l)) : nb.links; };
+  const clash = nodeById(nb.clash);
+  const refresh = () => {
+    const t = row.target();
+    for (const input of [name, type, mgmt]) input.disabled = !!t;
+    if (t) { name.value = t.data('name'); type.value = t.data('type') || type.value; mgmt.value = t.data('host') || ''; }
+    else { name.value = nb.name; mgmt.value = nb.managementIp; }
+    links.replaceChildren(...nb.links.map((l) => {
+      const line = Object.assign(document.createElement('div'), { textContent: `${l.localIf || '?'} ↔ ${l.remoteIf || '?'}` });
+      if (t && drawn(source, t, l)) { line.className = 'drawn'; line.title = 'Already drawn'; }
+      return line;
+    }));
+    // Explain uncertain matches and warn about a second device with the same name.
+    const sameName = !t && realNodes().filter((n) => n.data('name').toLowerCase() === name.value.trim().toLowerCase());
+    note.className = 'sub';
+    note.textContent = '';
+    if (t && !certain) note.textContent = `Matched by name only (no serial number to compare)`;
+    else if (clash && !t) { note.className = 'sub warn'; note.textContent = `Not the ${clash.data('name')} on the map: different serial number`; }
+    else if (sameName && sameName.length) { note.className = 'sub warn'; note.textContent = `A device called ${sameName[0].data('name')} is already on the map`; }
+    const nothingNew = t && !row.newLinks().length;
+    tick.disabled = !!nothingNew;
+    if (nothingNew) tick.checked = false;
+    el.classList.toggle('off', !tick.checked);
+    updateCount();
+  };
+  tick.checked = nb.isNetworkDevice;
+  tick.onchange = refresh;
+  if (choice) choice.onchange = () => { if (choice.value !== 'new' || nb.isNetworkDevice) tick.checked = true; refresh(); };
+  name.oninput = () => { if (!row.target()) refresh(); };
   el.append(tick, nameCell, type, links, mgmtCell, platform);
-  const sync = () => { el.classList.toggle('off', !tick.checked); updateCount(); };
-  tick.onchange = sync;
-  el.classList.toggle('off', !tick.checked);
-  return { nb, el, tick, name, type, mgmt, existing, newLinks };
+  refresh();
+  return row;
 }
 
 function plan() {
   const chosen = review ? review.rows.filter((x) => x.tick.checked && !x.tick.disabled) : [];
-  return { devices: chosen.filter((x) => !x.existing), links: chosen.reduce((n, x) => n + x.newLinks.length, 0), chosen };
+  return { devices: chosen.filter((x) => !x.target()), links: chosen.reduce((n, x) => n + x.newLinks().length, 0), chosen };
 }
 
 function updateCount() {
+  if (!review) return;
   const { devices, links } = plan();
   $('#disccount').textContent = devices.length || links ? `Adds ${plural(devices.length, 'device')} and ${plural(links, 'link')}` : 'Nothing selected';
   $('#discAdd').disabled = !devices.length && !links;
@@ -200,9 +257,14 @@ function addChosen() {
   const spots = placeAround(source, devices.length);
   const added = [], skipped = [];
   let links = 0, sameLogins = 0;
+  // Every neighbor identified as a device on the map teaches it its serial / MAC / full name /
+  // addresses, also when there is nothing new to add, so the next discovery is certain.
+  for (const x of review.rows) { const t = x.target(); if (t) remember(t, identityOf(x.nb)); }
   for (const x of chosen) {
-    let target = x.existing;
-    if (!target) {
+    // A device deleted since the discovery ran is simply added again.
+    let target = x.target();
+    if (target) remember(target, identityOf(x.nb)); // learn its serial / MAC / addresses for next time
+    else {
       // New devices connect the way the source device does (protocol, port, and, for network
       // devices, its credentials); an address typed as "host:port" sets its own port. Phones and
       // servers rarely share the network gear's login, so they ask when first connected.
@@ -213,9 +275,10 @@ function addChosen() {
         id: uid(), name: x.name.value.trim() || x.nb.name, type: x.type.value, host: addr.host, port: addr.port,
         protocol: s.protocol || 'ssh', credId: sameLogin ? s.credId || '' : '', username: sameLogin ? s.username || '' : '',
       } });
+      remember(target, identityOf(x.nb));
       added.push(target);
     }
-    for (const l of x.newLinks) {
+    for (const l of x.newLinks()) {
       // An interface can only be used by one link on a device.
       if (ifInUse(source, l.localIf) || ifInUse(target, l.remoteIf)) { skipped.push(`${l.localIf} ↔ ${l.remoteIf}`); continue; }
       cy.add({ group: 'edges', data: { id: uid(), source: source.id(), target: target.id(), srcIf: l.localIf, dstIf: l.remoteIf } });

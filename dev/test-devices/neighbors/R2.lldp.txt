@@ -1,0 +1,18 @@
+------------------------------------------------
+Local Intf: Gi0/2
+Chassis id: 00aa.bbcc.0003
+Port id: Gi1/0/3
+Port Description: GigabitEthernet1/0/3
+System Name: core-sw.lab.local
+
+System Description: 
+Cisco IOS Software [Amsterdam], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.3.4
+
+Time remaining: 104 seconds
+System Capabilities: B,R
+Enabled Capabilities: B,R
+Management Addresses:
+    IP: 10.255.0.3
+Auto Negotiation - supported, enabled
+
+Total entries displayed: 1

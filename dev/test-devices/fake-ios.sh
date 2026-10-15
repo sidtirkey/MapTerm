@@ -6,6 +6,14 @@
 # /neighbors/<hostname>.cdp.txt and .lldp.txt (absent file = protocol not enabled).
 # Enable password: cisco
 HOST=$(hostname)
+# Each lab device's serial number (and, for the Catalyst-like core-sw, base MAC), as real
+# devices print them in "show version"; neighbor discovery uses them to tell devices apart.
+case "$HOST" in
+  R1) SERIAL=FTX2201A0R1 ;;
+  R2) SERIAL=FGL2304B0R2 ;;
+  core-sw) SERIAL=FOC2311X0CS; BASE_MAC=00:aa:bb:cc:00:03 ;;
+  *) SERIAL=FTX0000A000 ;;
+esac
 ENABLE_SECRET=cisco
 mode=user   # user | priv | conf | if
 len=24      # lines per page; "terminal length 0" turns paging off
@@ -44,6 +52,12 @@ show_version() {
     echo "$HOST uptime is 3 weeks, 2 days, 4 hours, 11 minutes"
     echo "System image file is \"flash:fake-ios.bin\""
     for i in $(seq 1 30); do echo "Feature line $i: enabled"; done
+    echo ""
+    echo "Processor board ID $SERIAL"
+    if [ -n "$BASE_MAC" ]; then
+      echo "Base Ethernet MAC Address          : $BASE_MAC"
+      echo "System Serial Number               : $SERIAL"
+    fi
     echo ""
     echo "Configuration register is 0x2102"
   } | page

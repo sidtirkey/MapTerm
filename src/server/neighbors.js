@@ -3,16 +3,32 @@
 //   parseCdp(text)   Cisco IOS / IOS-XE / NX-OS  "show cdp neighbors detail"
 //   parseLldp(text)  Cisco IOS / IOS-XE / NX-OS and Arista EOS  "show lldp neighbors detail"
 //
-// Both return one entry per link:
-//   { name, platform, description, capabilities: Set, localIf, remoteIf, addresses: [{ ip, kind }], via }
+//   parseVersion(text) "show version": the device's own serial number, base MAC and hostname
+//
+// parseCdp / parseLldp return one entry per link:
+//   { name, platform, description, capabilities: Set, localIf, remoteIf, addresses: [{ ip, kind }], identity, via }
 // neighborDevices(entries) merges them (CDP first, so its details win) into one row per device:
-//   { name, kind, type, isNetworkDevice, platform, managementIp, addresses, links: [{ localIf, remoteIf }], via }
+//   { name, kind, type, isNetworkDevice, platform, managementIp, addresses, links: [{ localIf, remoteIf }], identity, via }
+// identity holds what identifies the device beyond its display name:
+//   { serials: [], macs: [], chassisIds: [], names: [] }  (names: full reported names, with domain, lower case)
 // Output from a device with CDP/LLDP disabled, or an unknown command, gives no entries.
 
 const IPV4 = /\b(\d{1,3}(?:\.\d{1,3}){3})\b/;
 const IPV4_ONLY = /^\d{1,3}(\.\d{1,3}){3}$/;
 const MAC = /^([0-9a-f]{4}\.){2}[0-9a-f]{4}$|^([0-9a-f]{2}[:-]){5}[0-9a-f]{2}$/i;
 const NOT_ADVERTISED = /not advertised/i;
+
+/* ---------- identifiers ---------- */
+
+// MAC addresses in any notation ("0011.2233.4455", "00:11:22:33:44:55", "00-11-…") as 12 hex digits.
+export const normalizeMac = (s) => (MAC.test(String(s || '').trim()) ? String(s).toLowerCase().replace(/[^0-9a-f]/g, '') : '');
+// A serial number in a device ID, as NX-OS reports it: "N9K-2(FDO21120U8N)".
+const serialIn = (deviceId) => ((String(deviceId).match(/\(([A-Za-z0-9]{6,})\)$/) || [])[1] || '').toUpperCase();
+// The full reported name, lower case, without quotes or a serial number in brackets.
+const fullName = (raw) => String(raw || '').trim().replace(/^"(.*)"$/, '$1').replace(/\([A-Za-z0-9]{6,}\)$/, '').trim().toLowerCase();
+const identity = ({ serial = '', mac = '', chassis = '', name = '' }) => ({
+  serials: serial ? [serial] : [], macs: mac ? [mac] : [], chassisIds: chassis ? [chassis] : [], names: name ? [name] : [],
+});
 
 /* ---------- names and interfaces ---------- */
 
@@ -134,6 +150,7 @@ export function parseCdp(text) {
     entries.push({
       name, platform: (pc[1] || '').trim(), description: firstLineAfter(block, /^Version\s*:/),
       capabilities: cdpCaps(pc[2]), localIf: shortIf(ip[1]), remoteIf: shortIf(ip[2]), addresses, via: 'cdp',
+      identity: identity({ serial: serialIn(deviceId), name: fullName(deviceId) }),
     });
   }
   return entries;
@@ -146,10 +163,13 @@ const platformFrom = (desc) => ((desc.match(/running on an? (.+)$/i) || [])[1] |
 
 function lldpEntry({ name, chassis, localIf, remoteIf, description, caps, mgmt }) {
   if (!localIf) return null;
+  // The chassis ID is usually the device's base MAC; other kinds are kept as an opaque ID.
+  const mac = normalizeMac(chassis);
   return {
     name: cleanName(name || chassis), platform: description ? platformFrom(description) : '', description,
     capabilities: lldpCaps(caps), localIf: shortIf(localIf), remoteIf: shortIf(remoteIf),
     addresses: mgmt.map((a) => ({ ip: a, kind: 'management' })), via: 'lldp',
+    identity: identity({ mac, chassis: mac || !chassis ? '' : chassis.toLowerCase(), name: name ? fullName(name) : '' }),
   };
 }
 
@@ -193,34 +213,83 @@ export function parseLldp(text) {
   return /^Interface \S+ detected \d+ LLDP neighbors?:/m.test(t) ? parseEos(t) : parseCiscoLldp(t);
 }
 
+/* ---------- show version ---------- */
+
+// The device's own identifiers, from "show version":
+//   IOS / IOS-XE  "Processor board ID FTX1840AB1C", Catalyst "System Serial Number : FOC…",
+//                 "Base Ethernet MAC Address : 00:11:22:33:44:55", "R1 uptime is …"
+//   NX-OS         "Processor Board ID FDO21120U8N", "Device name: N9K-1"
+//   Arista EOS    "Serial number: JPE12345678", "System MAC address: 001c.7311.2233"
+export function parseVersion(text) {
+  const t = normalize(text);
+  const pick = (...res) => { for (const re of res) { const m = t.match(re); if (m) return m[1].trim(); } return ''; };
+  const serial = pick(/^\s*System [Ss]erial [Nn]umber\s*:\s*(\S+)/m, /^\s*Serial [Nn]umber\s*:\s*(\S+)/m, /^\s*Processor [Bb]oard ID\s+(\S+)/m);
+  const mac = normalizeMac(pick(/^\s*Base [Ee]thernet MAC [Aa]ddress\s*:\s*(\S+)/m, /^\s*System MAC address\s*:\s*(\S+)/m));
+  const hostname = pick(/^(\S+) uptime is/m, /^\s*Device name:\s*(\S+)/m);
+  return { ...identity({ serial: serial.toUpperCase(), mac }), hostname };
+}
+
 /* ---------- one row per neighbor device ---------- */
 
+const IP_OR_MAC = (n) => MAC.test(n) || IPV4_ONLY.test(n);
+const union = (a = [], b = []) => [...new Set([...a, ...b])];
+
+// Entries describe the same device when they share a serial number, MAC / chassis ID, full name
+// or address, or (unless their serial numbers say otherwise) the same short name. So a device
+// whose CDP entry has a name and whose LLDP entry only a MAC still becomes one row when an
+// address ties them together.
 export function neighborDevices(entries) {
-  const devices = new Map();
-  for (const e of entries) {
-    const key = e.name.toLowerCase();
-    if (!devices.has(key)) devices.set(key, { name: e.name, platform: '', description: '', caps: new Set(), addresses: [], links: [], via: new Set() });
-    const d = devices.get(key);
-    d.platform ||= e.platform;
-    d.description ||= e.description;
-    e.capabilities.forEach((c) => d.caps.add(c));
-    d.via.add(e.via);
-    for (const a of e.addresses) {
-      const known = d.addresses.find((x) => x.ip === a.ip);
-      if (!known) d.addresses.push({ ...a });
-      else if (a.kind === 'management') known.kind = 'management';
+  const parent = entries.map((_, i) => i);
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const owner = new Map();
+  const join = (i, key) => { if (owner.has(key)) parent[find(i)] = find(owner.get(key)); else owner.set(key, i); };
+  entries.forEach((e, i) => {
+    e.identity.serials.forEach((x) => join(i, 's:' + x));
+    e.identity.macs.forEach((x) => join(i, 'm:' + x));
+    e.identity.chassisIds.forEach((x) => join(i, 'c:' + x));
+    e.identity.names.filter((x) => x.includes('.')).forEach((x) => join(i, 'n:' + x));
+    e.addresses.forEach((a) => join(i, 'a:' + a.ip));
+  });
+  // Then by short name, between groups whose serial numbers don't contradict each other.
+  const groupId = (i) => find(i);
+  const serialsOf = (root) => entries.filter((_, k) => groupId(k) === root).flatMap((e) => e.identity.serials);
+  const byShort = new Map();
+  entries.forEach((e, i) => {
+    if (IP_OR_MAC(e.name)) return;
+    const key = e.name.toLowerCase(), other = byShort.get(key);
+    if (other === undefined) return byShort.set(key, i);
+    const [a, b] = [serialsOf(groupId(i)), serialsOf(groupId(other))];
+    if (!(a.length && b.length && !a.some((x) => b.includes(x)))) parent[groupId(i)] = groupId(other);
+  });
+
+  const groups = new Map();
+  entries.forEach((e, i) => { const root = find(i); if (!groups.has(root)) groups.set(root, []); groups.get(root).push(e); });
+  return [...groups.values()].map((group) => {
+    const d = { name: '', platform: '', description: '', caps: new Set(), addresses: [], links: [], via: new Set(), identity: identity({}) };
+    for (const e of group) {
+      if (!d.name || (IP_OR_MAC(d.name) && !IP_OR_MAC(e.name))) d.name = e.name; // a real name beats a MAC
+      d.platform ||= e.platform;
+      d.description ||= e.description;
+      e.capabilities.forEach((c) => d.caps.add(c));
+      d.via.add(e.via);
+      for (const k of Object.keys(d.identity)) d.identity[k] = union(d.identity[k], e.identity[k]);
+      for (const a of e.addresses) {
+        const known = d.addresses.find((x) => x.ip === a.ip);
+        if (!known) d.addresses.push({ ...a });
+        else if (a.kind === 'management') known.kind = 'management';
+      }
+      // The same link can be reported by both CDP and LLDP; parallel links stay separate.
+      const link = d.links.find((l) => l.localIf === e.localIf);
+      if (link) link.remoteIf ||= e.remoteIf;
+      else d.links.push({ localIf: e.localIf, remoteIf: e.remoteIf });
     }
-    // The same link can be reported by both CDP and LLDP; parallel links stay separate.
-    const link = d.links.find((l) => l.localIf === e.localIf);
-    if (link) link.remoteIf ||= e.remoteIf;
-    else d.links.push({ localIf: e.localIf, remoteIf: e.remoteIf });
-  }
-  return [...devices.values()].map((d) => {
     const kind = kindOf(d.caps, `${d.platform} ${d.description}`);
     const addresses = [...d.addresses].sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'management' ? -1 : 1));
     return {
       name: d.name, kind, type: MAP_TYPE[kind] || kind, isNetworkDevice: NETWORK_KINDS.has(kind),
       platform: d.platform, managementIp: addresses[0]?.ip || '', addresses, links: d.links, via: [...d.via].sort(),
+      identity: d.identity,
     };
   }).sort((a, b) => (b.isNetworkDevice - a.isNetworkDevice) || a.name.localeCompare(b.name));
 }
+

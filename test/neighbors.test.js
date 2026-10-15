@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { parseCdp, parseLldp, neighborDevices, cleanName, shortIf } from '../src/server/neighbors.js';
+import { parseCdp, parseLldp, parseVersion, neighborDevices, cleanName, shortIf } from '../src/server/neighbors.js';
 
 const sample = (name) => fs.readFileSync(new URL(`./fixtures/neighbors/${name}`, import.meta.url), 'utf8');
 // The parts of a neighbor row that matter for the map, easy to compare.
@@ -102,4 +102,42 @@ test('works with Windows line endings (some terminal servers send CRLF)', () => 
 
 test('shortening an already short interface name changes nothing', () => {
   for (const n of ['Gi0/1', 'Te1/1/1', 'Eth1/49', 'Po10', 'mgmt0', 'Port 1']) assert.equal(shortIf(shortIf(n)), shortIf(n));
+});
+
+/* ---------- identities (serial numbers, MACs, full names) ---------- */
+
+test('reads the device\'s own serial number, base MAC and hostname from show version', () => {
+  const ios = 'Cisco IOS XE Software, Version 16.09.04\nR1 uptime is 3 weeks, 2 days\ncisco ISR4331/K9 (1RU) processor with 1795979K/6147K bytes of memory.\nProcessor board ID FDO21520AB1\n';
+  const cat9k = 'Cisco IOS XE Software, Version 17.03.04\ncore-sw uptime is 1 year\nBase Ethernet MAC Address          : 70:b3:17:aa:bb:cc\nMotherboard Serial Number          : FOC12345XYZ\nSystem Serial Number               : FCW2233L0AB\n';
+  const nxos = 'Cisco Nexus Operating System (NX-OS) Software\n  Device name: N9K-1\n  cisco Nexus9000 C93180YC-EX chassis\n  Processor Board ID FDO21120U8N\n';
+  const eos = 'Arista DCS-7050SX-64\nHardware version: 01.01\nSerial number: JPE14211234\nSystem MAC address: 001c.7311.2233\n';
+  assert.deepEqual(parseVersion(ios), { serials: ['FDO21520AB1'], macs: [], chassisIds: [], names: [], hostname: 'R1' });
+  assert.deepEqual(parseVersion(cat9k), { serials: ['FCW2233L0AB'], macs: ['70b317aabbcc'], chassisIds: [], names: [], hostname: 'core-sw' });
+  assert.deepEqual(parseVersion(nxos), { serials: ['FDO21120U8N'], macs: [], chassisIds: [], names: [], hostname: 'N9K-1' });
+  assert.deepEqual(parseVersion(eos), { serials: ['JPE14211234'], macs: ['001c73112233'], chassisIds: [], names: [], hostname: '' });
+});
+
+test('captures identifiers from CDP and LLDP', () => {
+  const n9k = neighborDevices(parseCdp(sample('nxos-cdp-detail.txt'))).find((d) => d.name === 'N9K-2');
+  assert.deepEqual(n9k.identity.serials, ['FDO21120U8N'], 'NX-OS puts the serial number in the device ID');
+  const r2 = neighborDevices(parseCdp(sample('ios-cdp-detail.txt'))).find((d) => d.name === 'R2');
+  assert.deepEqual(r2.identity.names, ['r2.lab.example.com'], 'the full name, with its domain, is kept');
+  const spine = neighborDevices(parseLldp(sample('eos-lldp-detail.txt'))).find((d) => d.name === 'spine1');
+  assert.deepEqual(spine.identity.macs, ['001c73114455'], 'the LLDP chassis MAC, in one notation');
+});
+
+test('one device reported by CDP (name) and LLDP (MAC only) becomes one row when an address ties them', () => {
+  const cdp = '-------------------------\nDevice ID: R2.lab.local\nEntry address(es): \n  IP address: 10.0.0.2\nPlatform: cisco ISR4331,  Capabilities: Router\nInterface: GigabitEthernet0/1,  Port ID (outgoing port): GigabitEthernet0/1\n';
+  const lldp = '------------------------------------------------\nLocal Intf: Gi0/2\nChassis id: 0011.2233.4455\nPort id: Gi0/2\nSystem Name - not advertised\n\nEnabled Capabilities: R\nManagement Addresses:\n    IP: 10.0.0.2\n';
+  const rows = neighborDevices([...parseCdp(cdp), ...parseLldp(lldp)]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].name, 'R2', 'a real name is preferred over a MAC');
+  assert.deepEqual(rows[0].links.map((l) => l.localIf), ['Gi0/1', 'Gi0/2']);
+  assert.deepEqual(rows[0].identity.macs, ['001122334455']);
+});
+
+test('two neighbors with the same short name but different serial numbers stay apart', () => {
+  const block = (id, ifc) => `-------------------------\nDevice ID:${id}\nPlatform: N9K-C93180YC-EX, Capabilities: Router Switch\nInterface: ${ifc}, Port ID (outgoing port): Ethernet1/1\n`;
+  const rows = neighborDevices(parseCdp(block('sw1(FDO1111AAAA)', 'Ethernet1/1') + block('sw1(FDO2222BBBB)', 'Ethernet1/2')));
+  assert.equal(rows.length, 2);
 });

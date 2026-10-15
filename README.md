@@ -22,7 +22,11 @@ R1 first, and continues on the rest when told to.*
   review. Routers, switches, firewalls and access points are ticked; phones and servers are not.
   Neighbors already on the map only add their missing links. Pick a management address from the
   discovered ones or type your own, and the devices are placed around the source device and
-  linked with interface names on both ends, inheriting its connection settings.
+  linked with interface names on both ends, inheriting its connection settings. A device seen
+  from several neighbors is added once: MapTerm recognises devices by serial number or MAC
+  address first (from `show version`, LLDP and NX-OS CDP), then by full name or address, and
+  remembers what it learns, so renamed devices are still recognised. When only the name matches,
+  or two devices share a name, it asks instead of guessing.
 - **Topology maps**: routers, switches, layer 3 switches, firewalls, access points, servers and
   more, with links labelled by interface (`Gi0/1`, `eth0`). Parallel links are supported.
 - **Several maps**: separate maps for production, lab or a planned build, switched from the
