@@ -1,6 +1,6 @@
 # MapTerm
 
-A network topology map you work from. Start with one device and let MapTerm discover its
+A network topology map and terminal to work from. Start with one device and let MapTerm discover its
 CDP / LLDP neighbors to build the map, then click any device to open an SSH or Telnet
 terminal, record sessions, and run commands across many devices with a safety check for
 configuration changes. Desktop app for macOS, Windows and Linux.
