@@ -31,7 +31,7 @@ export function endLinkDraw() {
 
 // Name of the interface a link uses on the given end node.
 const ifOn = (e, node) => (e.data('source') === node.id() ? e.data('srcIf') : e.data('dstIf')) || '';
-function ifInUse(node, name, skip) {
+export function ifInUse(node, name, skip) {
   if (!name) return false;
   return node.connectedEdges().some((e) => e !== skip && ifOn(e, node).toLowerCase() === name.toLowerCase());
 }

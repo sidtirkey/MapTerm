@@ -1,0 +1,18 @@
+------------------------------------------------
+Local Intf: Gi1/0/24
+Chassis id: 0242.ac11.0002
+Port id: eth0
+Port Description: eth0
+System Name: nmcore11.lab.local
+
+System Description: 
+Alpine Linux v3.20 Linux 6.10.14-linuxkit
+
+Time remaining: 101 seconds
+System Capabilities: B,R,S
+Enabled Capabilities: S
+Management Addresses:
+    IP: 10.255.0.11
+Auto Negotiation - not supported
+
+Total entries displayed: 1

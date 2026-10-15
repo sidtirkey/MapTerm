@@ -8,6 +8,7 @@ import { connectNode, credCache, refreshMap } from './sessions.js';
 import { credOptions } from './credentials.js';
 import { updatePickbar } from './run.js';
 import { currentMapId } from './maps.js';
+import { discoverNeighbors } from './discover.js';
 
 export let cy = null;
 export let mode = 'select';
@@ -83,7 +84,7 @@ const nodeFields = (d = {}) => [
   { key: 'username', label: 'Username', value: d.username, showIf: ['credId', ''] },
 ];
 // Accept "host:port" (or "[v6]:port") typed into the host field.
-function splitHostPort(v) {
+export function splitHostPort(v) {
   const m = /^\[([^\]]+)\]:(\d+)$/.exec(v.host || '') || /^([^:]+):(\d+)$/.exec(v.host || '');
   if (m) { v.host = m[1]; v.port = m[2]; }
   return v;
@@ -116,6 +117,7 @@ const STYLE = [
   { selector: 'node.focus', style: { 'border-width': 2.5, 'border-color': '#2a56d6' } },
   { selector: 'node.chosen', style: { 'underlay-color': '#2a56d6', 'underlay-opacity': 0.22, 'underlay-padding': 7, 'underlay-shape': 'round-rectangle',
     'border-width': 2.5, 'border-color': '#2a56d6' } },
+  { selector: 'node.fresh', style: { 'underlay-color': '#0f9d73', 'underlay-opacity': 0.3, 'underlay-padding': 9, 'underlay-shape': 'round-rectangle' } },
   { selector: 'node.pick', style: { 'border-width': 2, 'border-style': 'dashed', 'border-color': '#2a56d6' } },
   { selector: 'node:selected', style: { 'overlay-color': '#2a56d6', 'overlay-opacity': 0.12 } },
   { selector: 'edge', style: { width: 2.5, 'line-color': '#8794a5', 'curve-style': 'bezier', 'control-point-step-size': 36,
@@ -155,6 +157,7 @@ export function initMap() {
     if (mode !== 'select') return;
     showMenu(evt.renderedPosition, [
       [`Open ${protocolName(n.data())}`, () => connectNode(n)],
+      ['Discover neighbors', () => discoverNeighbors(n)],
       ['Add link', () => startLinkDraw(n, evt.position)],
       ['Edit', async () => { const v = await ask('Edit device', nodeFields(n.data()), 'Save'); if (v && v.name) { n.data(splitHostPort(v)); credCache.delete(n.id()); save(); } }],
       ['Delete', () => { n.remove(); save(); }, 'danger'],

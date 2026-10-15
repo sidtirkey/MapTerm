@@ -1,0 +1,47 @@
+-------------------------
+Device ID: R1.lab.local
+Entry address(es): 
+  IP address: 10.1.13.1
+Platform: Cisco ISR4331/K9,  Capabilities: Router Switch IGMP 
+Interface: GigabitEthernet1/0/1,  Port ID (outgoing port): GigabitEthernet0/2
+Holdtime : 150 sec
+
+Version :
+Cisco IOS Software, Fake-IOS Software (MAPTERM-TEST), Version 15.9(3)M
+
+advertisement version: 2
+Management address(es): 
+  IP address: 10.255.0.1
+
+-------------------------
+Device ID: R1.lab.local
+Entry address(es): 
+  IP address: 10.1.13.1
+Platform: Cisco ISR4331/K9,  Capabilities: Router Switch IGMP 
+Interface: GigabitEthernet1/0/2,  Port ID (outgoing port): GigabitEthernet0/3
+Holdtime : 150 sec
+
+Version :
+Cisco IOS Software, Fake-IOS Software (MAPTERM-TEST), Version 15.9(3)M
+
+advertisement version: 2
+Management address(es): 
+  IP address: 10.255.0.1
+
+-------------------------
+Device ID: R2.lab.local
+Entry address(es): 
+  IP address: 10.1.23.2
+Platform: Cisco ISR4331/K9,  Capabilities: Router Switch IGMP 
+Interface: GigabitEthernet1/0/3,  Port ID (outgoing port): GigabitEthernet0/2
+Holdtime : 161 sec
+
+Version :
+Cisco IOS XE Software, Version 16.09.04
+
+advertisement version: 2
+Management address(es): 
+  IP address: 10.255.0.2
+
+
+Total cdp entries displayed : 3

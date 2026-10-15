@@ -63,6 +63,9 @@ export function listMaps() {
   return { current: maps.some((m) => m.id === saved) ? saved : maps[0]?.id, maps };
 }
 
+// A map's devices and links (null if there is no such map).
+export const getMap = (id) => read(id);
+
 // The folder a map uses for 'logDir' or 'runDir'; '' until the user has chosen one.
 export const mapFolder = (id, kind) => read(id)?.[kind] || '';
 

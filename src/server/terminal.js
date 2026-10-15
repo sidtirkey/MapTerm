@@ -6,14 +6,17 @@
 //     (Telnet without credentials: the user logs in by hand in the terminal)
 //   data { data } · resize { cols, rows } · log-start { mapId, name, seed, seedCol } · log-stop
 //   batch { mapId, devices, commands, layout, canary } · batch-continue · batch-stop
+//   discover { mapId, nodeId, creds? }  (creds: { username, password, enable } typed this session)
 // Messages to the page:
 //   ready · data · closed · error · notice · log · log-error (needFolder: the map has no log folder yet)
 //   batch-started · batch-status · batch-paused · batch-done · batch-error
+//   discover-status { state, detail } · discover-result { error, neighbors, protocols, raw }
 import fs from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
 import { WebSocketServer } from 'ws';
 import { SSH_ALGORITHMS } from './config.js';
-import { mapFolder } from './maps.js';
+import { mapFolder, getMap } from './maps.js';
+import { discoverNeighbors } from './discovery.js';
 import { SessionLog } from './session-log.js';
 import { stamp, newLogFile } from './files.js';
 import { enabler, firstPrompt } from './cli.js';
@@ -35,7 +38,7 @@ export function attachTerminalServer(server, { resolveCreds }) {
 }
 
 function handleConnection(ws, resolveCreds) {
-  let shell = null, live = false, target = null, log = null, batch = null;
+  let shell = null, live = false, target = null, log = null, batch = null, discovery = null;
   const dec = new StringDecoder('utf8');
   const send = (o) => ws.readyState === 1 && ws.send(JSON.stringify(o));
 
@@ -99,9 +102,33 @@ function handleConnection(ws, resolveCreds) {
     shell.on('close', () => { clearTimeout(wake); if (watch && watch.cancel) watch.cancel(); stopLog(); send({ type: 'closed' }); ws.close(); });
   };
 
+  // Neighbor discovery on one device of a map (read-only; the page adds what the user picks).
+  const discover = async (m) => {
+    const result = (r) => send({ type: 'discover-result', neighbors: [], protocols: {}, raw: {}, ...r });
+    const map = getMap(m.mapId);
+    const device = map && map.nodes.find((n) => n.id === m.nodeId);
+    if (!device) return result({ error: 'That device is no longer on the map.' });
+    if (!device.host) return result({ error: 'The device has no IP address or hostname.' });
+    const typed = m.creds && m.creds.username ? m.creds : null;
+    let auth;
+    try {
+      // Same rules as "Run commands": a credential set, credentials typed this session, or
+      // (Telnet only) none at all.
+      if (device.credId) auth = await resolveCreds({ credId: device.credId });
+      else if (typed) auth = await resolveCreds(typed);
+      else if (device.protocol === 'telnet') auth = {};
+      else return result({ error: 'No credentials for this device. Give it a credential set, or connect to it once first.' });
+    } catch (e) { return result({ error: e.message }); }
+    discovery = discoverNeighbors({ device, auth, map, sourceId: device.id, algorithms: SSH_ALGORITHMS },
+      { onStatus: (state, detail) => send({ type: 'discover-status', state, detail }) });
+    result(await discovery.done);
+    discovery = null;
+  };
+
   ws.on('message', (raw) => {
     let m; try { m = JSON.parse(raw); } catch { return; }
 
+    if (m.type === 'discover' && !shell && !batch && !discovery) return discover(m);
     if (m.type === 'batch' && !shell && !batch) {
       const dir = mapFolder(m.mapId, 'runDir');
       if (!dir) return send({ type: 'batch-error', message: 'Choose a results folder for this map first.' });
@@ -124,5 +151,5 @@ function handleConnection(ws, resolveCreds) {
     }
   });
 
-  ws.on('close', () => { stopLog(); if (shell) shell.end(); if (batch) batch.abort(); });
+  ws.on('close', () => { stopLog(); if (shell) shell.end(); if (batch) batch.abort(); if (discovery) discovery.stop(); });
 }

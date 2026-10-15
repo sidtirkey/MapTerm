@@ -119,3 +119,34 @@ html,body{height:100%;margin:0;font-family:var(--sans);color:var(--ink);backgrou
 #mapmenu button small{margin-left:auto;flex:none;font-size:12px;color:var(--muted)}
 #mapmenu button.danger{color:var(--dead)}
 #mapmenu hr{margin:6px 0;border:0;border-top:1px solid var(--grid)}
+
+/* neighbor discovery */
+#discmodal{position:fixed;inset:0;background:rgba(18,24,34,.45);display:none;align-items:center;justify-content:center;z-index:16}
+#discbox{display:flex;flex-direction:column;width:min(980px,96vw);max-height:90vh;padding:20px;background:#fff;border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,.3)}
+#discbox h3{margin:0 0 4px;font-size:17px}
+#discstatus{margin:0 0 12px;font-size:13px;color:var(--muted)}
+#discstatus.err{color:var(--dead)}
+#discstatus .spin{display:inline-block;width:10px;height:10px;margin-right:8px;border:2px solid var(--grid);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-1px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){#discstatus .spin{animation:none}}
+#disclist{overflow:auto;border-top:1px solid var(--grid)}
+#disclist .group{padding:10px 4px 4px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+#disclist .row{display:grid;grid-template-columns:22px minmax(120px,1.1fr) 140px minmax(150px,1.3fr) minmax(130px,1fr) 170px;gap:10px;align-items:start;padding:9px 4px;border-bottom:1px solid #eef1f4;font-size:14px}
+#disclist .row.head{padding:6px 4px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--grid)}
+#disclist .row.off{color:var(--muted)}
+#disclist input[type=text],#disclist select{width:100%;padding:5px 7px;font:inherit;font-size:13px;border:1px solid var(--line);border-radius:4px;color:var(--ink);background:#fff}
+#disclist input[type=checkbox]{margin:7px 0 0;width:15px;height:15px}
+#disclist .sub{display:block;margin-top:3px;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#disclist .links{font-family:var(--mono);font-size:12px;line-height:1.7;padding-top:4px}
+#disclist .links .drawn{color:var(--muted);text-decoration:line-through}
+#disclist .onmap{display:inline-block;margin-top:4px;padding:1px 7px;border-radius:10px;background:#e7f5ef;color:#0b6e51;font-size:12px}
+#discraw{margin-top:10px;font-size:13px;color:var(--muted)}
+#discraw summary{cursor:pointer}
+#discraw pre{max-height:220px;overflow:auto;margin:8px 0 0;padding:8px 10px;background:#f3f5f8;border-radius:4px;font-family:var(--mono);font-size:12px;color:var(--ink);white-space:pre}
+#discbtns{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:14px}
+#disccount{margin-right:auto;font-size:13px;color:var(--muted)}
+#discbtns button{font:inherit;font-size:14px;padding:7px 16px;border:1px solid var(--grid);background:#fff;border-radius:4px;cursor:pointer;color:var(--ink)}
+#discbtns button.ok{background:var(--blue);border-color:var(--blue);color:#fff}
+#discbtns button:disabled{opacity:.45;cursor:default}
+#toast{position:fixed;left:50%;bottom:24px;z-index:30;transform:translateX(-50%) translateY(20px);max-width:min(560px,92vw);padding:10px 16px;border-radius:6px;background:#1b2430;color:#fff;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0)}

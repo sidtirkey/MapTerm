@@ -1,23 +1,14 @@
-// Runs a list of commands on several devices and saves each device's transcript to a file.
-// Commands go through one interactive shell per device, over SSH or Telnet (not one exec per
-// command), so
-// sequences such as "conf t" / "interface ..." / "end" keep their context. A command is
-// treated as finished when the device's prompt comes back and the output goes quiet.
+// "Run commands": runs a list of commands on several devices (several at once) and saves each
+// device's transcript, one file per device or one file per command, plus a summary. Talking to
+// each device (login, enable, prompts, pagers) is done by device-session.js.
 import fs from 'node:fs';
 import path from 'node:path';
-import { StringDecoder } from 'node:string_decoder';
 import { SessionLog } from './session-log.js';
 import { stamp, safeName, openUnique } from './files.js';
-import { PROMPT_END, MORE, lastLine, enabler } from './cli.js';
-import { openShell, DEFAULT_PORT } from './shell.js';
+import { DEFAULT_PORT } from './shell.js';
+import { runCommands, COMMAND_TIMEOUT } from './device-session.js';
 
-const PARALLEL = 8;              // devices worked on at once
-const LOGIN_TIMEOUT = 20000;     // to reach the first prompt
-const COMMAND_TIMEOUT = 60000;   // per command, for the prompt to come back
-const LOGIN_SETTLE = 800;        // quiet time that confirms the first prompt (after banners)
-const SETTLE = 400;              // quiet time that confirms a command has finished
-const WAKE_AFTER = 1500;         // Telnet: quiet time without a prompt before pressing Enter
-const WAKE_TRIES = 2;            // (console-server lines often show nothing until Enter)
+const PARALLEL = 8; // devices worked on at once
 
 const isTelnet = (d) => d.protocol === 'telnet';
 const portOf = (d) => d.port || DEFAULT_PORT[isTelnet(d) ? 'telnet' : 'ssh'];
@@ -63,7 +54,7 @@ class CommandFiles {
 }
 
 async function runDevice(d, ctx) {
-  const { runDir, commands, send, algorithms, conns } = ctx;
+  const { runDir, commands, send, algorithms } = ctx;
   const status = (state, detail = '') => send({ type: 'batch-status', id: d.id, state, detail });
   let auth = null, authError = null;
   if (!d.host) authError = 'No IP address or hostname set';
@@ -71,97 +62,34 @@ async function runDevice(d, ctx) {
   // anyway, the shell reports it at once.
   else if (isTelnet(d) && !d.credId && !d.username && !d.password) auth = {};
   else try { auth = await ctx.resolveCreds(d); } catch (e) { authError = e.message; }
-  return new Promise((resolve) => {
-    const perCommand = ctx.layout === 'command';
-    const sink = perCommand ? new CommandFiles(runDir, d, commands.length) : new DeviceFile(runDir, d, auth?.username);
-    const log = new SessionLog(sink);
-    let sh = null, ready = false, finished = false, timer = null, settle = null, wake = null, timedOut = 0;
 
-    const finish = (error) => {
-      if (finished) return;
-      finished = true;
-      clearTimeout(timer); clearTimeout(settle); clearTimeout(wake); if (sh) { conns.delete(sh); sh.end(); }
-      if (error && ctx.aborted) error = 'Stopped';
-      const note = error ? '' : timedOut ? `${timedOut} command(s) got no prompt back within ${COMMAND_TIMEOUT / 1000}s` : '';
-      // Per-command files end with their command's output (no trailing prompt), and only
-      // get a footer when something went wrong.
-      if (perCommand && !error) log.discardLine();
-      log.end(error ? `\n# Failed: ${error}\n` : perCommand ? '' : `\n# Finished: ${stamp()}${note ? ` (${note})` : ''}\n`);
-      status(error ? 'failed' : note ? 'warn' : 'done', error || note);
-      resolve({ name: d.name, file: sink.name, ok: !error, detail: error || note });
-    };
+  const perCommand = ctx.layout === 'command';
+  const sink = perCommand ? new CommandFiles(runDir, d, commands.length) : new DeviceFile(runDir, d, auth?.username);
+  const log = new SessionLog(sink);
 
-    if (authError) return finish(authError);
-    if (ctx.aborted) return finish('Stopped');
-    status('connecting');
-    // A wide terminal keeps devices from wrapping long output lines. Over Telnet the login
-    // prompts are answered by the shell (see shell.js); the prompt detection below starts
-    // once the device shows its command prompt.
-    sh = openShell({ protocol: isTelnet(d) ? 'telnet' : 'ssh', host: d.host, port: d.port, auth, cols: 511, rows: 100, term: 'vt100', algorithms });
-    conns.add(sh);
-    sh.on('error', (e) => finish(e.message));
-    sh.on('ready', () => {
-      ready = true;
-      const dec = new StringDecoder('utf8');
-      let i = -1, base = null, seen = '', sincePager = '', enabling = null, wakes = 0;
-      const arm = (ms, fn) => { clearTimeout(timer); timer = setTimeout(fn, ms); };
-      // Telnet: until a prompt shows, press Enter after a quiet spell (console-server lines
-      // and "Press RETURN to get started" screens wait for a key).
-      const nudge = () => {
-        clearTimeout(wake);
-        if (isTelnet(d) && base === null && wakes < WAKE_TRIES) wake = setTimeout(() => { wakes++; sh.write('\r'); }, WAKE_AFTER);
-      };
-      nudge();
-
-      const next = () => {
-        if (finished) return;
-        if (++i >= commands.length) return finish(null);
-        status('running', `${i + 1}/${commands.length}  ${commands[i]}`);
-        seen = ''; sincePager = '';
-        sink.command(i, commands[i]); // the prompt line still in SessionLog's buffer lands in the new file
-        sh.write(commands[i] + '\r');
-        arm(COMMAND_TIMEOUT, () => {
-          timedOut++;
-          log.write(`\r\n# (no prompt after ${COMMAND_TIMEOUT / 1000}s; moving on)\r\n`);
-          next();
-        });
-      };
-
-      arm(LOGIN_TIMEOUT, () => finish('No prompt received after login'));
-      sh.on('data', (chunk) => {
-        const t = dec.write(chunk);
-        log.write(t);
-        nudge();
-        seen = (seen + t).slice(-8192); sincePager += t;
-        // Answer a pager once per appearance (the erase that follows must not trigger it again).
-        if (MORE.test(lastLine(sincePager))) { sincePager = ''; sh.write(' '); return; }
-        if (enabling) return enabling(t);
-
-        clearTimeout(settle);
-        const line = lastLine(seen);
-        if (base === null) {
-          if (PROMPT_END.test(line)) settle = setTimeout(() => {
-            // "R1#" -> "R1", "nmcore11:~$" -> "nmcore11"; config modes like "R1(config)#" still match.
-            base = line.replace(PROMPT_END, '').split(/[(:\s]/)[0];
-            if (!(auth.enable && line.endsWith('>'))) return next();
-            // At a ">" prompt with an enable password saved: enter enable mode first.
-            clearTimeout(timer);
-            status('running', 'enable');
-            enabling = enabler((x) => sh.write(x), auth.enable, (ok, why) => {
-              enabling = null;
-              if (!ok) return finish(`Could not enter enable mode: ${why}`);
-              next();
-            });
-          }, LOGIN_SETTLE);
-        } else if (seen.includes('\n') && PROMPT_END.test(line) && line.startsWith(base)) {
-          settle = setTimeout(next, SETTLE);
-        }
-      });
-      // A last command such as "exit" may end the session on purpose.
-      sh.on('close', () => finish(i >= commands.length - 1 && base !== null ? null : 'Session closed by the device'));
+  let result;
+  if (authError) result = { error: authError, timedOut: 0 };
+  else if (ctx.aborted) result = { error: 'Stopped', timedOut: 0 };
+  else {
+    const job = runCommands({ device: d, auth, commands, algorithms }, {
+      onStatus: status,
+      onData: (t) => log.write(t),
+      onCommand: (i, cmd) => sink.command(i, cmd), // the prompt line still in SessionLog's buffer lands in the new file
+      onTimeout: () => log.write(`\r\n# (no prompt after ${COMMAND_TIMEOUT / 1000}s; moving on)\r\n`),
     });
-    sh.on('close', () => { if (!ready) finish('Connection closed before the commands finished'); });
-  });
+    ctx.jobs.add(job);
+    result = await job.done;
+    ctx.jobs.delete(job);
+  }
+
+  const error = result.error && ctx.aborted ? 'Stopped' : result.error;
+  const note = error ? '' : result.timedOut ? `${result.timedOut} command(s) got no prompt back within ${COMMAND_TIMEOUT / 1000}s` : '';
+  // Per-command files end with their command's output (no trailing prompt), and only
+  // get a footer when something went wrong.
+  if (perCommand && !error) log.discardLine();
+  log.end(error ? `\n# Failed: ${error}\n` : perCommand ? '' : `\n# Finished: ${stamp()}${note ? ` (${note})` : ''}\n`);
+  status(error ? 'failed' : note ? 'warn' : 'done', error || note);
+  return { name: d.name, file: sink.name, ok: !error, detail: error || note };
 }
 
 // With canary set, the first device runs alone; the run then pauses ("batch-paused") until
@@ -179,7 +107,7 @@ export function runBatch({ dir, devices, commands, layout, canary }, { send, alg
     fs.mkdirSync(runDir, { recursive: true });
   } catch (e) { send({ type: 'batch-error', message: e.message }); return none; }
 
-  const ctx = { runDir, commands, layout: layout === 'command' ? 'command' : 'device', send, algorithms, resolveCreds, conns: new Set(), aborted: false };
+  const ctx = { runDir, commands, layout: layout === 'command' ? 'command' : 'device', send, algorithms, resolveCreds, jobs: new Set(), aborted: false };
   const started = new Date(), queue = devices.map((d, i) => [d, i]), results = [];
   let waiting = null; // resolves the pause after the first device: true = continue, false = stop
   send({ type: 'batch-started', dir: runDir, canary: !!canary && devices.length > 1 });
@@ -211,7 +139,7 @@ export function runBatch({ dir, devices, commands, layout, canary }, { send, alg
   });
 
   return {
-    abort() { ctx.aborted = true; ctx.conns.forEach((c) => c.end()); if (waiting) waiting(false); },
+    abort() { ctx.aborted = true; ctx.jobs.forEach((j) => j.stop()); if (waiting) waiting(false); },
     resume() { if (waiting) waiting(true); },
   };
 }

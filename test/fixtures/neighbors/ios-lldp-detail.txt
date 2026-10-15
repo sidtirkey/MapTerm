@@ -1,0 +1,51 @@
+------------------------------------------------
+Local Intf: Gi1/0/48
+Chassis id: 001c.7311.2233
+Port id: Ethernet2
+Port Description: to-campus-core
+System Name: spine2.lab
+
+System Description: 
+Arista Networks EOS version 4.28.3M running on an Arista Networks DCS-7050SX-64
+
+Time remaining: 101 seconds
+System Capabilities: B,R
+Enabled Capabilities: B,R
+Management Addresses:
+    IP: 192.168.0.12
+Auto Negotiation - not supported
+Physical media capabilities - not advertised
+Media Attachment Unit type - not advertised
+Vlan ID: - not advertised
+
+------------------------------------------------
+Local Intf: Gi1/0/10
+Chassis id: 10.20.0.77
+Port id: 7C2E.0D11.2233:P1
+Port Description: SW PORT
+System Name: SEP7C2E0D112233
+
+System Description: 
+Cisco IP Phone 7841, V1, sip78xx.14-1-1-0001-125
+
+Time remaining: 160 seconds
+System Capabilities: B,T
+Enabled Capabilities: B,T
+Management Addresses:
+    IP: 10.20.0.77
+Auto Negotiation - supported, enabled
+
+------------------------------------------------
+Local Intf: Gi1/0/11
+Chassis id: a4bb.6d00.1122
+Port id: a4bb.6d00.1122
+Port Description - not advertised
+System Name - not advertised
+System Description - not advertised
+
+Time remaining: 91 seconds
+System Capabilities - not advertised
+Enabled Capabilities - not advertised
+Management Addresses - not advertised
+
+Total entries displayed: 3

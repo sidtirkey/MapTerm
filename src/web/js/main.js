@@ -9,6 +9,7 @@ import { initSettings } from './settings.js';
 import { initCredentials } from './credentials.js';
 import { initRun, runInProgress } from './run.js';
 import { initMaps, mapMenuOpen, closeMapMenu } from './maps.js';
+import { initDiscovery, discoveryOpen, closeDiscovery } from './discover.js';
 
 initMap();
 initLinks();
@@ -17,6 +18,7 @@ initSettings();
 initCredentials();
 initRun();
 initMaps();
+initDiscovery();
 
 // Closing or reloading the page would end open terminal sessions and a running command run, so
 // ask first (the desktop app shows its own dialog for this; browsers show "Leave site?").
@@ -31,6 +33,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if ($('#modal').style.display === 'flex') $('#mCancel').click();
   else if (mapMenuOpen()) closeMapMenu();
+  else if (discoveryOpen()) closeDiscovery();
   else if ($('#credmodal').style.display === 'flex') $('#credClose').click();
   else if (mode === 'link' || mode === 'pick') setMode('select');
 });

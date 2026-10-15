@@ -1,0 +1,42 @@
+----------------------------------------
+Device ID:N9K-2(FDO21120U8N)
+System Name: N9K-2
+
+Interface address(es): 2
+    IPv4 Address: 10.2.0.2
+    IPv6 Address: fe80::2be:75ff:fe00:1
+Platform: N9K-C93180YC-EX, Capabilities: Router Switch IGMP Filtering Supports-STP-Dispute
+Interface: Ethernet1/49, Port ID (outgoing port): Ethernet1/49
+Holdtime: 140 sec
+
+Version:
+Cisco Nexus Operating System (NX-OS) Software, Version 9.3(5)
+
+Advertisement Version: 2
+
+Native VLAN: 1
+Duplex: full
+
+MTU: 9216
+Physical Location: snmplocation
+Mgmt address(es):
+    IPv4 Address: 192.168.1.12
+
+----------------------------------------
+Device ID:fw1.dc.example.net
+System Name: fw1
+
+Interface address(es): 1
+    IPv4 Address: 10.2.9.1
+Platform: Cisco Firepower FPR-2130, Capabilities: Router
+Interface: Ethernet1/1, Port ID (outgoing port): Ethernet1/2
+Holdtime: 162 sec
+
+Version:
+Cisco Firepower Threat Defense, Version 7.0.1
+
+Advertisement Version: 2
+Duplex: full
+
+Mgmt address(es):
+    IPv4 Address: 192.168.1.50

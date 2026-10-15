@@ -100,3 +100,28 @@ test('never sends secrets back from the credentials API', async () => {
   assert.ok(Array.isArray(body.sets));
   assert.equal(typeof body.store, 'string');
 });
+
+test('discovers neighbors over the /ssh WebSocket', async () => {
+  const { WebSocket } = await import('ws');
+  const { fakeTelnetDevice, closeFakeDevices } = await import('./helpers/fake-telnet-device.js');
+  const cdp = fs.readFileSync(new URL('./fixtures/neighbors/nxos-cdp-detail.txt', import.meta.url), 'utf8').trimEnd();
+  const port = await fakeTelnetDevice({ name: 'N9K-1', responses: { 'terminal length 0': '', 'show cdp neighbors detail': cdp, 'show lldp neighbors detail': '% LLDP is not enabled' } });
+  const map = (await json('/api/maps', 'POST', { name: 'Discovery' })).map;
+  await json(`/api/maps/${map.id}`, 'PUT', { nodes: [
+    { id: 'tel', name: 'N9K-1', protocol: 'telnet', host: '127.0.0.1', port, x: 0, y: 0 },
+    { id: 'ssh', name: 'R1', protocol: 'ssh', host: '127.0.0.1', port: 1, x: 0, y: 0 },
+  ], edges: [] });
+  const discover = (nodeId) => new Promise((resolve) => {
+    const ws = new WebSocket(base.replace('http', 'ws') + '/ssh'), statuses = [];
+    ws.on('open', () => ws.send(JSON.stringify({ type: 'discover', mapId: map.id, nodeId })));
+    ws.on('message', (raw) => { const m = JSON.parse(raw); if (m.type === 'discover-status') statuses.push(m.state); if (m.type === 'discover-result') { ws.close(); resolve({ ...m, statuses }); } });
+  });
+  const ok = await discover('tel');
+  assert.equal(ok.error, '');
+  assert.deepEqual(ok.neighbors.map((n) => n.name), ['fw1', 'N9K-2']);
+  assert.deepEqual(ok.protocols, { cdp: 'ok', lldp: 'off' });
+  assert.ok(ok.statuses.includes('connecting') && ok.statuses.includes('running'), 'progress is reported');
+  assert.match((await discover('ssh')).error, /No credentials for this device/);
+  assert.match((await discover('gone')).error, /no longer on the map/);
+  closeFakeDevices();
+});

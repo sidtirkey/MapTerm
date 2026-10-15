@@ -2,8 +2,9 @@
 #   Start:  npm run devices:up
 #   Stop:   npm run devices:down
 # Login: admin / admin. Ports are bound to 127.0.0.1 only.
-# R1 imitates a Cisco IOS CLI over SSH (port 2224) and Telnet (port 2323); its enable password
-# is "cisco".
+# R1, R2 and core-sw imitate a Cisco IOS CLI (enable password "cisco"): R1 over SSH (2224)
+# and Telnet (2323), R2 over SSH (2225), core-sw over SSH (2226). Their CDP / LLDP neighbor
+# tables (neighbors/) describe one lab topology, for trying neighbor discovery from R1.
 
 x-device: &device
   image: lscr.io/linuxserver/openssh-server:latest
@@ -44,3 +45,24 @@ services:
       - ./fake-ios.sh:/fake-ios.sh:ro
       - ./fake-ios-init.sh:/custom-cont-init.d/fake-ios-init.sh:ro
       - ./telnetd.sh:/custom-services.d/telnetd:ro
+      - ./neighbors:/neighbors:ro
+
+  R2:
+    <<: *device
+    hostname: R2
+    container_name: mapterm-r2
+    ports: ["127.0.0.1:2225:2222"]
+    volumes:
+      - ./fake-ios.sh:/fake-ios.sh:ro
+      - ./fake-ios-init.sh:/custom-cont-init.d/fake-ios-init.sh:ro
+      - ./neighbors:/neighbors:ro
+
+  core-sw:
+    <<: *device
+    hostname: core-sw
+    container_name: mapterm-core-sw
+    ports: ["127.0.0.1:2226:2222"]
+    volumes:
+      - ./fake-ios.sh:/fake-ios.sh:ro
+      - ./fake-ios-init.sh:/custom-cont-init.d/fake-ios-init.sh:ro
+      - ./neighbors:/neighbors:ro

@@ -15,6 +15,12 @@ on R1 first, and continues on the rest when told to.*
 
 - **Topology maps**: routers, switches, firewalls, servers and more, with links labelled by
   interface (`Gi0/1`, `eth0`). Parallel links between the same devices are supported.
+- **Neighbor discovery**: build the map outwards from one device. *Discover neighbors* logs
+  in, reads `show cdp neighbors detail` and `show lldp neighbors detail` (Cisco IOS / IOS-XE /
+  NX-OS, Arista EOS), and lists what it finds for review: routers, switches, firewalls and access
+  points are ticked, phones and servers are not; neighbors already on the map only add their
+  missing links. Pick the management address from the discovered ones or type your own, then
+  the devices are placed around the source device and linked with interface names on both ends.
 - **Several maps**: keep separate maps for production, lab or a planned build, and switch
   between them from the toolbar. Duplicate a map to plan a change, or export it to a file to
   share or back it up (exports never contain passwords).
@@ -123,9 +129,19 @@ To release, push a version tag (`git tag v1.0.0 && git push --tags`). The
 and Linux installers on GitHub and attaches them to a draft release for you to publish.
 
 The test devices in [dev/test-devices](dev/test-devices) are SSH containers on
-`127.0.0.1`. Ports 2221–2223 are Linux shells; `R1` imitates a Cisco IOS command line with
-an enable password, configuration modes and a `--More--` pager, over SSH (port 2224) and
-Telnet (port 2323). Log in with `admin` / `admin`; the enable password is `cisco`.
+`127.0.0.1`. Ports 2221–2223 are Linux shells. `R1`, `R2` and `core-sw` imitate a Cisco IOS
+command line with an enable password, configuration modes, a `--More--` pager and CDP / LLDP
+neighbor tables that describe one small lab network:
+
+| Device | Connect with | Neighbors |
+|---|---|---|
+| R1 | SSH `127.0.0.1:2224`, Telnet `127.0.0.1:2323` | R2, core-sw (two links), an IP phone; LLDP off |
+| R2 | SSH `127.0.0.1:2225` | R1, core-sw |
+| core-sw | SSH `127.0.0.1:2226` | R1 (two links), R2; a Linux server over LLDP |
+
+Log in with `admin` / `admin`; the enable password is `cisco`. The neighbor tables report
+realistic management addresses (`10.255.0.x`), so in the lab connect to a discovered device
+with its `127.0.0.1:<port>` address instead.
 
 ### Project layout
 
@@ -143,6 +159,9 @@ src/
     shell.js         one interface for SSH and Telnet sessions
     telnet.js        Telnet client (option negotiation)
     batch.js         "Run commands" across devices
+    device-session.js  one device's command line: login, enable, prompts, pagers
+    discovery.js     neighbor discovery on one device
+    neighbors.js     CDP / LLDP output parsers
     cli.js           prompts, pagers, Telnet login and enable mode
     credentials.js   credential sets
     vault.js         OS password stores
@@ -159,6 +178,7 @@ src/
     js/sessions.js   terminal tabs and the dock
     js/recording.js  session recording
     js/run.js        "Run commands" and the progress panel
+    js/discover.js   "Discover neighbors": review window, adding devices and links
     js/commands.js   read-only / change / disruptive classification
     js/credentials.js, settings.js, dialog.js, icons.js, dom.js
 test/                tests (npm test)

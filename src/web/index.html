@@ -38,6 +38,14 @@
 </div>
 
 <div id="mapmenu" role="menu" aria-label="Maps"></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<div id="discmodal" role="dialog" aria-labelledby="disctitle"><div id="discbox">
+  <h3 id="disctitle"></h3><p id="discstatus"></p>
+  <div id="disclist"></div>
+  <details id="discraw"><summary>What the device returned</summary><pre></pre></details>
+  <div id="discbtns"><span id="disccount"></span><button type="button" id="discCancel">Cancel</button><button type="button" id="discAdd" class="ok">Add</button></div>
+</div></div>
 <input type="file" id="mapfile" accept=".json,application/json" hidden>
 
 <div id="credmodal" role="dialog" aria-labelledby="credtitle"><div id="credbox"><h3 id="credtitle">Credentials</h3><p id="credstore"></p>

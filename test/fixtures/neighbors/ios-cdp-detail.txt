@@ -1,0 +1,88 @@
+-------------------------
+Device ID: R2.lab.example.com
+Entry address(es): 
+  IP address: 10.1.12.2
+  IPv6 address: FE80::2  (link-local)
+Platform: cisco ISR4331/K9,  Capabilities: Router Switch IGMP 
+Interface: GigabitEthernet0/0/1,  Port ID (outgoing port): GigabitEthernet0/0/0
+Holdtime : 155 sec
+
+Version :
+Cisco IOS XE Software, Version 16.09.04
+Cisco IOS Software [Fuji], ISR Software (X86_64_LINUX_IOSD-UNIVERSALK9-M), Version 16.9.4, RELEASE SOFTWARE (fc2)
+Technical Support: http://www.cisco.com/techsupport
+Copyright (c) 1986-2019 by Cisco Systems, Inc.
+
+advertisement version: 2
+VTP Management Domain: ''
+Duplex: full
+Management address(es): 
+  IP address: 10.255.0.2
+
+-------------------------
+Device ID: core-sw.lab.example.com
+Entry address(es): 
+  IP address: 10.1.13.3
+Platform: cisco C9300-48P,  Capabilities: Router Switch IGMP 
+Interface: GigabitEthernet0/0/2,  Port ID (outgoing port): GigabitEthernet1/0/1
+Holdtime : 172 sec
+
+Version :
+Cisco IOS Software [Amsterdam], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.3.4, RELEASE SOFTWARE (fc3)
+
+advertisement version: 2
+Native VLAN: 1
+Duplex: full
+Management address(es): 
+  IP address: 10.255.0.3
+
+-------------------------
+Device ID: core-sw.lab.example.com
+Entry address(es): 
+  IP address: 10.1.13.3
+Platform: cisco C9300-48P,  Capabilities: Router Switch IGMP 
+Interface: GigabitEthernet0/0/3,  Port ID (outgoing port): GigabitEthernet1/0/2
+Holdtime : 172 sec
+
+Version :
+Cisco IOS Software [Amsterdam], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.3.4, RELEASE SOFTWARE (fc3)
+
+advertisement version: 2
+Management address(es): 
+  IP address: 10.255.0.3
+
+-------------------------
+Device ID: SEP001122334455
+Entry address(es): 
+  IP address: 10.20.0.51
+Platform: Cisco IP Phone 8841,  Capabilities: Host Phone Two-port Mac Relay 
+Interface: GigabitEthernet0/1/0,  Port ID (outgoing port): Port 1
+Holdtime : 133 sec
+Second Port Status: Up
+
+Version :
+sip88xx.12-8-1-0001-455
+
+advertisement version: 2
+Duplex: full
+Management address(es): 
+
+-------------------------
+Device ID: AP-floor2
+Entry address(es): 
+  IP address: 10.30.0.12
+Platform: cisco AIR-AP2802I-B-K9,  Capabilities: Router Trans-Bridge 
+Interface: GigabitEthernet0/1/1,  Port ID (outgoing port): GigabitEthernet0
+Holdtime : 128 sec
+
+Version :
+Cisco AP Software, ap3g3-k9w8 Version: 8.10.130.0
+
+advertisement version: 2
+Duplex: full
+Power drawn: 25.500 Watts
+Management address(es): 
+  IP address: 10.30.0.12
+
+
+Total cdp entries displayed : 5

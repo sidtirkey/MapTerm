@@ -1,0 +1,50 @@
+Interface Ethernet1 detected 1 LLDP neighbors:
+
+  Neighbor 001c.7311.4455/"Ethernet49/1", age 3 seconds
+  Discovered 1 day, 2:03:04 ago; Last changed 1 day, 2:03:04 ago
+  - Chassis ID type: MAC address (4)
+    Chassis ID     : 001c.7311.4455
+  - Port ID type: Interface name (5)
+    Port ID        : "Ethernet49/1"
+  - Time To Live: 120 seconds
+  - Port Description: "to-leaf1"
+  - System Name: "spine1.dc1.example.com"
+  - System Description: "Arista Networks EOS version 4.28.3M running on an Arista Networks DCS-7280SR-48C6"
+  - System Capabilities : Bridge, Router
+    Enabled Capabilities: Bridge, Router
+  - Management Address Subtype: IPv4 (1)
+    Management Address        : 192.168.0.11
+    Interface Number Subtype  : ifIndex (2)
+    Interface Number          : 999001
+    OID String                : 
+  - IEEE802.1 Port VLAN ID: 1
+
+Interface Ethernet2 detected 1 LLDP neighbors:
+
+  Neighbor 001c.7311.4455/"Ethernet50/1", age 4 seconds
+  Discovered 1 day, 2:03:04 ago; Last changed 1 day, 2:03:04 ago
+  - Chassis ID type: MAC address (4)
+    Chassis ID     : 001c.7311.4455
+  - Port ID type: Interface name (5)
+    Port ID        : "Ethernet50/1"
+  - Time To Live: 120 seconds
+  - System Name: "spine1.dc1.example.com"
+  - System Description: "Arista Networks EOS version 4.28.3M running on an Arista Networks DCS-7280SR-48C6"
+  - System Capabilities : Bridge, Router
+    Enabled Capabilities: Bridge, Router
+  - Management Address Subtype: IPv4 (1)
+    Management Address        : 192.168.0.11
+
+Interface Ethernet3 detected 0 LLDP neighbors:
+
+Interface Ethernet10 detected 1 LLDP neighbors:
+
+  Neighbor 0050.5600.aabb/"0050.5600.aabb", age 20 seconds
+  Discovered 0:10:00 ago; Last changed 0:10:00 ago
+  - Chassis ID type: MAC address (4)
+    Chassis ID     : 0050.5600.aabb
+  - Port ID type: MAC address (3)
+    Port ID        : 0050.5600.aabb
+  - Time To Live: 120 seconds
+  - System Capabilities : Station Only
+    Enabled Capabilities: Station Only

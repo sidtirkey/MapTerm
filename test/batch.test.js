@@ -1,39 +1,13 @@
 // "Run commands" over Telnet, against small Telnet devices run in this process.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import net from 'node:net';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { runBatch } from '../src/server/batch.js';
+import { fakeTelnetDevice as device, closeFakeDevices } from './helpers/fake-telnet-device.js';
 
-// A device CLI over Telnet. login: asks Username/Password first. silentUntilEnter: shows
-// nothing until the first Enter, like a console-server line.
-const servers = [];
-function device({ name, login = false, silentUntilEnter = false }) {
-  return new Promise((resolve) => {
-    const srv = net.createServer((s) => {
-      let state = login ? 'user' : 'cli', buf = '', woke = !silentUntilEnter;
-      const prompt = () => s.write(`\r\n${name}#`);
-      const start = () => (login ? s.write('\r\nUsername: ') : prompt());
-      if (woke) start();
-      s.on('data', (b) => {
-        buf += b.toString('latin1').replace(/\0/g, '');
-        for (let i; (i = buf.indexOf('\r')) >= 0;) {
-          const line = buf.slice(0, i).replace(/^\n/, ''); buf = buf.slice(i + 1);
-          if (!woke) { woke = true; start(); continue; }
-          s.write(line + '\r\n');
-          if (state === 'user') { state = 'pass'; s.write('Password: '); }
-          else if (state === 'pass') { state = line === 'pw' ? 'cli' : 'user'; state === 'cli' ? prompt() : s.write('\r\nLogin invalid\r\nUsername: '); }
-          else { if (line.trim()) s.write(`output of "${line.trim()}"\r\n`); prompt(); }
-        }
-      });
-    });
-    servers.push(srv);
-    srv.listen(0, '127.0.0.1', () => resolve(srv.address().port));
-  });
-}
-after(() => servers.forEach((s) => s.close()));
+after(closeFakeDevices);
 
 // Runs commands on the devices; resolves to { results: { name: status }, dir }.
 function run(devices, commands = ['show clock']) {

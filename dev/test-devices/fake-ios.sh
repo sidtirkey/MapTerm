@@ -2,7 +2,9 @@
 # A small imitation of a Cisco IOS command line, used as the login shell of the
 # "fake-ios" test container. Covers what MapTerm has to cope with on real gear:
 # ">" / "#" / "(config)#" prompts, enable with a password, a --More-- pager,
-# [confirm] questions and "% Invalid input" errors. Enable password: cisco
+# [confirm] questions and "% Invalid input" errors, and CDP / LLDP neighbor tables read from
+# /neighbors/<hostname>.cdp.txt and .lldp.txt (absent file = protocol not enabled).
+# Enable password: cisco
 HOST=$(hostname)
 ENABLE_SECRET=cisco
 mode=user   # user | priv | conf | if
@@ -46,6 +48,13 @@ show_version() {
     echo "Configuration register is 0x2102"
   } | page
 }
+# "show cdp neighbors detail" / "show lldp neighbors detail" (and abbreviations like
+# "sh cdp nei det"), from this device's neighbor file.
+neighbors() {
+  local file="/neighbors/$HOST.$1.txt"
+  if [ -f "$file" ]; then page < "$file"; else printf '%% %s is not enabled\n' "${1^^}"; fi
+}
+
 show_ip_int_brief() {
   printf '%-22s %-15s %-4s %-7s %-21s %s\n' Interface IP-Address OK? Method Status Protocol
   printf '%-22s %-15s %-4s %-7s %-21s %s\n' GigabitEthernet0/0 10.0.0.1 YES NVRAM up up
@@ -73,6 +82,8 @@ while true; do
     *:"terminal length "*|*:"term len "*|*:"term length "*) len=${cmd##* } ;;
     user:sh\ ver*|user:show\ ver*|priv:sh\ ver*|priv:show\ ver*) show_version ;;
     *:"sh ip int br"*|*:"show ip interface brief"*|*:"show ip int brief"*) show_ip_int_brief ;;
+    user:sh*\ cdp\ nei*\ det*|priv:sh*\ cdp\ nei*\ det*) neighbors cdp ;;
+    user:sh*\ lldp\ nei*\ det*|priv:sh*\ lldp\ nei*\ det*) neighbors lldp ;;
     *:"sh run"*|*:"show run"*|*:"show running-config"*)
       need_priv && { printf 'Building configuration...\n\n'; printf 'hostname %s\n!\ninterface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n!\nend\n\n' "$HOST" | page; } ;;
     priv:"conf t"|priv:"configure terminal"|priv:config*)

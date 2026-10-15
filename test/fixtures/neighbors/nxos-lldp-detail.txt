@@ -1,0 +1,35 @@
+Capability codes:
+  (R) Router, (B) Bridge, (T) Telephone, (C) DOCSIS Cable Device
+  (W) WLAN Access Point, (P) Repeater, (S) Station, (O) Other
+Device ID            Local Intf      Hold-time  Capability  Port ID
+
+Chassis id: 00be.75ab.cdef
+Port id: Eth1/50
+Local Port id: Eth1/50
+Port Description: Ethernet1/50
+System Name: N9K-2
+System Description: Cisco Nexus Operating System (NX-OS) Software 9.3(5)
+TAC support: http://www.cisco.com/tac
+Copyright (c) 2002-2020, Cisco Systems, Inc. All rights reserved.
+Time remaining: 105 seconds
+System Capabilities: B, R
+Enabled Capabilities: B, R
+Management Address: 192.168.1.12
+Management Address IPV6: not advertised
+Vlan ID: 1
+
+
+Chassis id: 5254.0011.2233
+Port id: ens192
+Local Port id: Eth1/10
+Port Description: not advertised
+System Name: backup01.dc.example.net
+System Description: Ubuntu 22.04.3 LTS Linux 5.15.0-91-generic
+Time remaining: 99 seconds
+System Capabilities: B, R, S
+Enabled Capabilities: S
+Management Address: 10.2.10.20
+Management Address IPV6: not advertised
+Vlan ID: not advertised
+
+Total entries displayed: 2
