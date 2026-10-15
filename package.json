@@ -1,6 +1,6 @@
 {
   "name": "mapterm",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Network topology map you work from: SSH terminals, session recording and guarded multi-device commands",
   "license": "AGPL-3.0-only",
   "author": "Siddharth Kumar Tirkey",
