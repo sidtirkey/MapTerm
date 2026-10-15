@@ -85,7 +85,8 @@ async function askRun() {
       else if (v.cred !== 'device') dev.credId = v.cred;
       else if (credSet(d.credId)) dev.credId = d.credId;
       else if (credCache.has(n.id())) Object.assign(dev, credCache.get(n.id()));
-      else missing.push(d.name);
+      // Telnet devices may need no login (e.g. console-server ports); if one asks, the run says so.
+      else if (dev.protocol !== 'telnet') missing.push(d.name);
       devices.push(dev);
     });
     if (missing.length) { note = `No saved credentials for ${missing.join(', ')}. Give them a credential set, or choose one above.\n${about}`; continue; }

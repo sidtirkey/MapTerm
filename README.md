@@ -21,7 +21,9 @@ on R1 first, and continues on the rest when told to.*
 - **SSH and Telnet terminals**: click a device to open a session in a dock of tabs, one per
   device. Drag tabs to reorder them. Older devices that only offer legacy SSH algorithms work
   too, and Telnet is there for gear without SSH (marked "· telnet" on the map, since it is not
-  encrypted). Over Telnet, MapTerm answers the device's login prompts from the credential set.
+  encrypted). Over Telnet, MapTerm answers the device's login prompts from the credential set;
+  devices without one (such as console-server ports) connect without a login, and MapTerm
+  presses Enter for lines that stay silent until a key is pressed.
 - **Credential sets**: usernames with passwords or SSH keys, plus an optional enable password.
   Passwords are kept in the operating system's secure store, never in MapTerm's files. With
   an enable password, MapTerm enters enable mode automatically at a `>` prompt.

@@ -9,13 +9,18 @@ import { StringDecoder } from 'node:string_decoder';
 import { SessionLog } from './session-log.js';
 import { stamp, safeName, openUnique } from './files.js';
 import { PROMPT_END, MORE, lastLine, enabler } from './cli.js';
-import { openShell } from './shell.js';
+import { openShell, DEFAULT_PORT } from './shell.js';
 
 const PARALLEL = 8;              // devices worked on at once
 const LOGIN_TIMEOUT = 20000;     // to reach the first prompt
 const COMMAND_TIMEOUT = 60000;   // per command, for the prompt to come back
 const LOGIN_SETTLE = 800;        // quiet time that confirms the first prompt (after banners)
 const SETTLE = 400;              // quiet time that confirms a command has finished
+const WAKE_AFTER = 1500;         // Telnet: quiet time without a prompt before pressing Enter
+const WAKE_TRIES = 2;            // (console-server lines often show nothing until Enter)
+
+const isTelnet = (d) => d.protocol === 'telnet';
+const portOf = (d) => d.port || DEFAULT_PORT[isTelnet(d) ? 'telnet' : 'ssh'];
 
 // Where a device's cleaned output goes. SessionLog writes through one of these.
 // One file for the whole session:
@@ -24,7 +29,7 @@ class DeviceFile {
     const { file, fd } = openUnique(runDir, safeName(d.name), '.txt');
     this.name = path.basename(file);
     this.out = fs.createWriteStream(null, { fd }); this.out.on('error', () => {});
-    this.out.write(`# MapTerm command run\n# Device: ${d.name} (${d.host}:${d.port || 22})  User: ${username || ''}\n# Started: ${stamp()}\n\n`);
+    this.out.write(`# MapTerm command run\n# Device: ${d.name} (${d.host}:${portOf(d)})  User: ${username || ''}\n# Started: ${stamp()}\n\n`);
   }
   command() {}
   write(s) { this.out.write(s); }
@@ -46,7 +51,7 @@ class CommandFiles {
     if (this.out) this.out.end();
     const { fd } = openUnique(this.dir, base, '.txt');
     this.out = fs.createWriteStream(null, { fd }); this.out.on('error', () => {});
-    this.out.write(`# Device: ${this.d.name} (${this.d.host}:${this.d.port || 22})\n${header}# Run at: ${stamp()}\n\n`);
+    this.out.write(`# Device: ${this.d.name} (${this.d.host}:${portOf(this.d)})\n${header}# Run at: ${stamp()}\n\n`);
   }
   command(i, cmd) { this.open(`${String(i + 1).padStart(this.width, '0')}_${safeName(cmd, 'command')}`, `# Command: ${cmd}\n`); }
   write(s) { if (this.out) this.out.write(s); }
@@ -62,17 +67,20 @@ async function runDevice(d, ctx) {
   const status = (state, detail = '') => send({ type: 'batch-status', id: d.id, state, detail });
   let auth = null, authError = null;
   if (!d.host) authError = 'No IP address or hostname set';
+  // Telnet devices may have no login (e.g. console-server ports). If one asks for a login
+  // anyway, the shell reports it at once.
+  else if (isTelnet(d) && !d.credId && !d.username && !d.password) auth = {};
   else try { auth = await ctx.resolveCreds(d); } catch (e) { authError = e.message; }
   return new Promise((resolve) => {
     const perCommand = ctx.layout === 'command';
     const sink = perCommand ? new CommandFiles(runDir, d, commands.length) : new DeviceFile(runDir, d, auth?.username);
     const log = new SessionLog(sink);
-    let sh = null, ready = false, finished = false, timer = null, settle = null, timedOut = 0;
+    let sh = null, ready = false, finished = false, timer = null, settle = null, wake = null, timedOut = 0;
 
     const finish = (error) => {
       if (finished) return;
       finished = true;
-      clearTimeout(timer); clearTimeout(settle); if (sh) { conns.delete(sh); sh.end(); }
+      clearTimeout(timer); clearTimeout(settle); clearTimeout(wake); if (sh) { conns.delete(sh); sh.end(); }
       if (error && ctx.aborted) error = 'Stopped';
       const note = error ? '' : timedOut ? `${timedOut} command(s) got no prompt back within ${COMMAND_TIMEOUT / 1000}s` : '';
       // Per-command files end with their command's output (no trailing prompt), and only
@@ -89,14 +97,21 @@ async function runDevice(d, ctx) {
     // A wide terminal keeps devices from wrapping long output lines. Over Telnet the login
     // prompts are answered by the shell (see shell.js); the prompt detection below starts
     // once the device shows its command prompt.
-    sh = openShell({ protocol: d.protocol === 'telnet' ? 'telnet' : 'ssh', host: d.host, port: d.port, auth, cols: 511, rows: 100, term: 'vt100', algorithms });
+    sh = openShell({ protocol: isTelnet(d) ? 'telnet' : 'ssh', host: d.host, port: d.port, auth, cols: 511, rows: 100, term: 'vt100', algorithms });
     conns.add(sh);
     sh.on('error', (e) => finish(e.message));
     sh.on('ready', () => {
       ready = true;
       const dec = new StringDecoder('utf8');
-      let i = -1, base = null, seen = '', sincePager = '', enabling = null;
+      let i = -1, base = null, seen = '', sincePager = '', enabling = null, wakes = 0;
       const arm = (ms, fn) => { clearTimeout(timer); timer = setTimeout(fn, ms); };
+      // Telnet: until a prompt shows, press Enter after a quiet spell (console-server lines
+      // and "Press RETURN to get started" screens wait for a key).
+      const nudge = () => {
+        clearTimeout(wake);
+        if (isTelnet(d) && base === null && wakes < WAKE_TRIES) wake = setTimeout(() => { wakes++; sh.write('\r'); }, WAKE_AFTER);
+      };
+      nudge();
 
       const next = () => {
         if (finished) return;
@@ -116,6 +131,7 @@ async function runDevice(d, ctx) {
       sh.on('data', (chunk) => {
         const t = dec.write(chunk);
         log.write(t);
+        nudge();
         seen = (seen + t).slice(-8192); sincePager += t;
         // Answer a pager once per appearance (the erase that follows must not trigger it again).
         if (MORE.test(lastLine(sincePager))) { sincePager = ''; sh.write(' '); return; }

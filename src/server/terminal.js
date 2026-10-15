@@ -81,15 +81,22 @@ function handleConnection(ws, resolveCreds) {
         send({ type: 'notice', level: ok ? 'info' : 'warn', message: ok ? 'Entered enable mode' : `Could not enter enable mode: ${why}` });
       });
     }, 800, 30000) : null;
-    shell.on('ready', () => { live = true; send({ type: 'ready' }); });
+    // Telnet: a console-server line often shows nothing until a key is pressed; if the device
+    // stays silent after connecting, press Enter once so the user sees where they are.
+    let wake = null, heard = false;
+    shell.on('ready', () => {
+      live = true; send({ type: 'ready' });
+      if (protocol === 'telnet') wake = setTimeout(() => { if (!heard) shell.write('\r'); }, 1500);
+    });
     shell.on('data', (d) => {
+      heard = true;
       const t = dec.write(d);
       if (watch) watch(t);
       if (log) log.write(t);
       send({ type: 'data', data: t });
     });
     shell.on('error', (e) => { stopLog(); send({ type: 'error', message: e.message }); ws.close(); });
-    shell.on('close', () => { if (watch && watch.cancel) watch.cancel(); stopLog(); send({ type: 'closed' }); ws.close(); });
+    shell.on('close', () => { clearTimeout(wake); if (watch && watch.cancel) watch.cancel(); stopLog(); send({ type: 'closed' }); ws.close(); });
   };
 
   ws.on('message', (raw) => {

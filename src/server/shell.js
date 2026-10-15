@@ -4,8 +4,9 @@
 //   sh.on('ready') · sh.on('data', buffer) · sh.on('close') · sh.on('error', err)
 //   sh.write(text) · sh.resize(cols, rows) · sh.end()
 //
-// auth is what credentials.js resolves ({ username, password | privateKey, passphrase }), or
-// null for a Telnet session the user logs into by hand.
+// auth is what credentials.js resolves ({ username, password | privateKey, passphrase }). For
+// Telnet it may be {} (no credentials: a login prompt is reported as an error at once) or null
+// (a session the user logs into by hand).
 import { EventEmitter } from 'node:events';
 import ssh2 from 'ssh2';
 import { TelnetClient } from './telnet.js';
@@ -27,8 +28,8 @@ function telnetShell({ host, port, auth, cols = 80, rows = 24, term = 'xterm-256
     return sh;
   }
   const t = new TelnetClient({ host, port: Number(port) || DEFAULT_PORT.telnet, cols, rows, term });
-  // With credentials, answer the device's Username / Password prompts.
-  const login = auth && (auth.username || auth.password)
+  // Answer the device's Username / Password prompts (or report them, with no credentials).
+  const login = auth
     ? loginResponder((x) => t.write(x), auth, (why) => { sh.emit('error', new Error(`Telnet login failed: ${why}`)); t.end(); })
     : null;
   t.on('connect', () => sh.emit('ready'));
