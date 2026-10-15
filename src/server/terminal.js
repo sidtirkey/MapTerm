@@ -2,13 +2,14 @@
 // recording) or per command run.
 //
 // Messages from the page:
-//   connect { protocol: 'ssh' | 'telnet', host, port, cols, rows, credId | username+password+enable }
+//   connect { protocol: 'ssh' | 'telnet', host, port, name, cols, rows, credId | username+password+enable, force? }
 //     (Telnet without credentials: the user logs in by hand in the terminal)
 //   data { data } · resize { cols, rows } · log-start { mapId, name, seed, seedCol } · log-stop
 //   batch { mapId, devices, commands, layout, canary } · batch-continue · batch-stop
 //   discover { mapId, nodeId, creds? }  (creds: { username, password, enable } typed this session)
 // Messages to the page:
 //   ready · data · closed · error · notice · log · log-error (needFolder: the map has no log folder yet)
+//   busy { names } (the device already has a terminal session in MapTerm; resend with force)
 //   batch-started · batch-status · batch-paused · batch-done · batch-error
 //   discover-status { state, detail } · discover-result { error, neighbors, protocols, raw }
 import fs from 'node:fs';
@@ -22,6 +23,21 @@ import { stamp, newLogFile } from './files.js';
 import { enabler, firstPrompt } from './cli.js';
 import { runBatch } from './batch.js';
 import { openShell, DEFAULT_PORT } from './shell.js';
+
+// Open terminal sessions by device address and port, across every MapTerm window and tab, so a
+// second login to a device happens only when the user asks for it (devices accept just a few
+// logins at a time). Discovery and "Run commands" use their own short sessions and aren't counted.
+const openTerminals = new Map(); // "host:port" -> Map(WebSocket -> device name)
+const terminalKey = (host, port) => `${String(host || '').trim().toLowerCase()}:${port}`;
+const terminalsOpenTo = (key) => [...(openTerminals.get(key)?.values() || [])];
+
+// GET /api/terminals?host=&port=&protocol=  ->  { open: [device names] }
+export function mountTerminalApi(app) {
+  app.get('/api/terminals', (req, res) => {
+    const protocol = req.query.protocol === 'telnet' ? 'telnet' : 'ssh';
+    res.json({ open: terminalsOpenTo(terminalKey(req.query.host, Number(req.query.port) || DEFAULT_PORT[protocol])) });
+  });
+}
 
 export function attachTerminalServer(server, { resolveCreds }) {
   const wss = new WebSocketServer({
@@ -38,7 +54,7 @@ export function attachTerminalServer(server, { resolveCreds }) {
 }
 
 function handleConnection(ws, resolveCreds) {
-  let shell = null, live = false, target = null, log = null, batch = null, discovery = null;
+  let shell = null, live = false, target = null, log = null, batch = null, discovery = null, terminal = null;
   const dec = new StringDecoder('utf8');
   const send = (o) => ws.readyState === 1 && ws.send(JSON.stringify(o));
 
@@ -66,6 +82,13 @@ function handleConnection(ws, resolveCreds) {
 
   const connect = async (m) => {
     const protocol = m.protocol === 'telnet' ? 'telnet' : 'ssh';
+    // One terminal session per device unless the user asked for another (force).
+    const key = terminalKey(m.host, Number(m.port) || DEFAULT_PORT[protocol]);
+    const open = terminalsOpenTo(key);
+    if (open.length && !m.force) { send({ type: 'busy', names: open }); return ws.close(); }
+    if (!openTerminals.has(key)) openTerminals.set(key, new Map());
+    openTerminals.get(key).set(ws, String(m.name || m.host));
+    terminal = key;
     let auth = null;
     try {
       // Telnet may connect without saved credentials; the user then logs in in the terminal.
@@ -151,5 +174,9 @@ function handleConnection(ws, resolveCreds) {
     }
   });
 
-  ws.on('close', () => { stopLog(); if (shell) shell.end(); if (batch) batch.abort(); if (discovery) discovery.stop(); });
+  ws.on('close', () => {
+    stopLog(); if (shell) shell.end(); if (batch) batch.abort(); if (discovery) discovery.stop();
+    const open = terminal && openTerminals.get(terminal);
+    if (open) { open.delete(ws); if (!open.size) openTerminals.delete(terminal); }
+  });
 }

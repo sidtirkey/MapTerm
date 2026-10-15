@@ -1,6 +1,6 @@
 // Terminal sessions (SSH or Telnet): one tab per device in the dock at the bottom, the tab strip
 // (drag to reorder) and the dock itself (minimise, resize).
-import { $, wsUrl } from './dom.js';
+import { $, wsUrl, getJSON } from './dom.js';
 import { ask } from './dialog.js';
 import { cy, save, protocolName } from './map.js';
 import { credSet } from './credentials.js';
@@ -35,10 +35,18 @@ export async function connectNode(n) {
   if (existing && existing.status !== 'dead') return activate(existing.id);
   if (existing) closeSession(existing.id);
   const d = n.data();
-  if (credSet(d.credId)) return openSession(n, { credId: d.credId });
+  // Another MapTerm window (or another device on the map with the same address) may already
+  // have a session to it. Devices accept only a few logins, so a second one needs a yes.
+  const port = d.port || (d.protocol === 'telnet' ? 23 : 22);
+  const busy = await getJSON(`/api/terminals?${new URLSearchParams({ host: d.host || '', port, protocol: d.protocol || 'ssh' })}`).catch(() => ({ open: [] }));
+  const force = busy.open.length > 0;
+  if (force && !(await ask(`${d.name} is already open`, [], 'Open a second session',
+    `MapTerm already has a terminal session to ${d.host}:${port}${busy.open[0] !== d.name ? ` (as ${busy.open[0]})` : ''}, in another window or tab. `
+    + 'Devices accept only a few logins at a time, so a second session is opened only if you ask for it.'))) return;
+  if (credSet(d.credId)) return openSession(n, { credId: d.credId }, force);
   let c = credCache.get(n.id());
   // Telnet without saved credentials: connect, and the user logs in in the terminal.
-  if (!c && d.protocol === 'telnet') return openSession(n, {});
+  if (!c && d.protocol === 'telnet') return openSession(n, {}, force);
   if (!c) {
     const v = await ask(`SSH to ${d.name}`, [
       { key: 'username', label: 'Username', value: d.username },
@@ -49,10 +57,11 @@ export async function connectNode(n) {
     c = v; credCache.set(n.id(), c);
     if (c.username !== d.username) { n.data('username', c.username); save(); }
   }
-  openSession(n, c);
+  openSession(n, c, force);
 }
 
-function openSession(n, c) {
+// force: open even though MapTerm already has a session to this device (the user said so).
+function openSession(n, c, force = false) {
   const d = n.data(), id = ++seq;
 
   const tab = document.createElement('div'); tab.className = 'tab';
@@ -77,7 +86,7 @@ function openSession(n, c) {
   const telnet = d.protocol === 'telnet';
   term.writeln(`\x1b[90mConnecting to ${d.host}:${d.port || (telnet ? 23 : 22)} over ${protocolName(d)}${telnet ? ' (not encrypted)' : ''} ...\x1b[0m`);
 
-  ws.onopen = () => out({ type: 'connect', protocol: d.protocol || 'ssh', host: d.host, port: d.port, cols: term.cols, rows: term.rows, ...c });
+  ws.onopen = () => out({ type: 'connect', protocol: d.protocol || 'ssh', host: d.host, port: d.port, name: d.name, cols: term.cols, rows: term.rows, force, ...c });
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.type === 'ready') { setStatus(s, 'live'); term.focus(); }
@@ -86,6 +95,11 @@ function openSession(n, c) {
     else if (m.type === 'log') { setRec(s, null); note(s, `■ Recording saved: ${m.file}`); }
     else if (m.type === 'log-error') { setRec(s, null); if (m.needFolder) chooseFolderAndRecord(s); else note(s, `Recording failed: ${m.message}`, 31); }
     else if (m.type === 'notice') note(s, m.message, m.level === 'warn' ? 33 : 90);
+    else if (m.type === 'busy') {
+      // Another window opened a session to this device at the same moment.
+      term.writeln(`\r\n\x1b[33mMapTerm already has a session to this device (${m.names.join(', ')}). Connect again to open a second one.\x1b[0m`);
+      setStatus(s, 'dead');
+    }
     else if (m.type === 'error') {
       term.writeln(`\r\n\x1b[31mConnection failed: ${m.message}\x1b[0m`);
       if (/authentication|login failed/i.test(m.message)) { credCache.delete(n.id()); term.writeln('\x1b[90mSaved password cleared. Connect again to retry.\x1b[0m'); }

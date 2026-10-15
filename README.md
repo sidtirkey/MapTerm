@@ -33,7 +33,8 @@ R1 first, and continues on the rest when told to.*
   toolbar. Duplicate a map to plan a change, or export it to a file to share or back it up
   (exports never contain passwords).
 - **SSH and Telnet terminals**: click a device to open a session in a dock of tabs, one per
-  device; drag tabs to reorder them. Older devices that only offer legacy SSH algorithms work,
+  device; drag tabs to reorder them. Devices accept only a few logins, so MapTerm keeps one
+  session per device across all its windows and asks before opening a second. Older devices that only offer legacy SSH algorithms work,
   and Telnet is there for gear without SSH (marked "· telnet" on the map, since it is not
   encrypted). Over Telnet, MapTerm answers the login prompts from the credential set; devices
   without one (such as console-server ports) connect without a login.

@@ -125,3 +125,30 @@ test('discovers neighbors over the /ssh WebSocket', async () => {
   assert.match((await discover('gone')).error, /no longer on the map/);
   closeFakeDevices();
 });
+
+test('allows a second terminal session to the same device only when asked to', async () => {
+  const { WebSocket } = await import('ws');
+  const { fakeTelnetDevice, closeFakeDevices } = await import('./helpers/fake-telnet-device.js');
+  const port = await fakeTelnetDevice({ name: 'SW9' });
+  const device = { protocol: 'telnet', host: '127.0.0.1', port, name: 'SW9' };
+  // Opens a terminal session; resolves to the first message that says how it went.
+  const open = (extra = {}) => new Promise((resolve) => {
+    const ws = new WebSocket(base.replace('http', 'ws') + '/ssh');
+    ws.on('open', () => ws.send(JSON.stringify({ type: 'connect', cols: 80, rows: 24, ...device, ...extra })));
+    ws.on('message', (raw) => { const m = JSON.parse(raw); if (m.type === 'ready' || m.type === 'busy') resolve({ ws, type: m.type, names: m.names }); });
+  });
+  const openNow = async () => (await json(`/api/terminals?host=127.0.0.1&port=${port}&protocol=telnet`)).open;
+  assert.deepEqual(await openNow(), []);
+  const first = await open();
+  assert.equal(first.type, 'ready');
+  assert.deepEqual(await openNow(), ['SW9'], 'the open session is listed');
+  const second = await open();
+  assert.deepEqual([second.type, second.names], ['busy', ['SW9']], 'a second session is refused');
+  const forced = await open({ force: true });
+  assert.equal(forced.type, 'ready', '...unless the user asked for it');
+  assert.deepEqual(await openNow(), ['SW9', 'SW9']);
+  first.ws.close(); forced.ws.close();
+  await new Promise((r) => setTimeout(r, 200));
+  assert.deepEqual(await openNow(), [], 'closed sessions are forgotten');
+  closeFakeDevices();
+});

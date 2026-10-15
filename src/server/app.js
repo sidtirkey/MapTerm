@@ -6,7 +6,7 @@ import { WEB_DIR, NODE_MODULES, readSettings, writeSettings } from './config.js'
 import { mountApi } from './api.js';
 import { mountMaps, countCredentialUse, forgetCredential } from './maps.js';
 import { mountCredentials } from './credentials.js';
-import { attachTerminalServer } from './terminal.js';
+import { attachTerminalServer, mountTerminalApi } from './terminal.js';
 
 export function createServer() {
   const app = express();
@@ -27,6 +27,7 @@ export function createServer() {
 
   mountApi(app);
   mountMaps(app);
+  mountTerminalApi(app);
   const resolveCreds = mountCredentials(app, readSettings, writeSettings, { countUse: countCredentialUse, onDelete: forgetCredential });
 
   const server = http.createServer(app);
