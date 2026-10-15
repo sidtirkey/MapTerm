@@ -2,7 +2,8 @@
 #   Start:  npm run devices:up
 #   Stop:   npm run devices:down
 # Login: admin / admin. Ports are bound to 127.0.0.1 only.
-# R1 (port 2224) imitates a Cisco IOS CLI; its enable password is "cisco".
+# R1 imitates a Cisco IOS CLI over SSH (port 2224) and Telnet (port 2323); its enable password
+# is "cisco".
 
 x-device: &device
   image: lscr.io/linuxserver/openssh-server:latest
@@ -38,7 +39,8 @@ services:
     <<: *device
     hostname: R1
     container_name: mapterm-r1
-    ports: ["127.0.0.1:2224:2222"]
+    ports: ["127.0.0.1:2224:2222", "127.0.0.1:2323:23"]
     volumes:
       - ./fake-ios.sh:/fake-ios.sh:ro
       - ./fake-ios-init.sh:/custom-cont-init.d/fake-ios-init.sh:ro
+      - ./telnetd.sh:/custom-services.d/telnetd:ro

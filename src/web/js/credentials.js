@@ -2,7 +2,7 @@
 // the page; the server keeps them in the OS keychain and only reports names and usernames.
 import { $, getJSON, postJSON, plural } from './dom.js';
 import { ask } from './dialog.js';
-import { realNodes, save } from './map.js';
+import { realNodes, save, flushSave } from './map.js';
 
 let credSets = [], credInfo = {};
 
@@ -25,7 +25,7 @@ function renderCreds() {
   if (!credSets.length) { list.innerHTML = '<li id="credempty">No credential sets yet. Add one, then choose it in a device\'s Edit form.</li>'; return; }
   credSets.forEach((c) => {
     const li = document.createElement('li');
-    const used = realNodes().filter((n) => n.data('credId') === c.id).length;
+    const used = c.used; // devices using it, in all maps
     li.innerHTML = '<div class="who"><b></b><small></small></div><button>Edit</button><button class="danger">Delete</button>';
     li.querySelector('b').textContent = c.name;
     li.querySelector('small').textContent = `${credSummary(c)} · ${plural(used, 'device')}`;
@@ -65,7 +65,7 @@ async function editCred(c) {
   }
 }
 
-async function openCreds() { await loadCreds(); renderCreds(); $('#credmodal').style.display = 'flex'; $('#credAdd').focus(); }
+async function openCreds() { await flushSave(); await loadCreds(); renderCreds(); $('#credmodal').style.display = 'flex'; $('#credAdd').focus(); }
 
 export function initCredentials() {
   loadCreds();

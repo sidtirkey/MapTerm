@@ -18,9 +18,10 @@ function readKey(keyPath, passphrase) {
   return { file, data };
 }
 
-export function mountCredentials(app, readSettings, writeSettings) {
+// maps.countUse(id) counts devices using a set in all maps; maps.onDelete(id) clears it from them.
+export function mountCredentials(app, readSettings, writeSettings, maps) {
   const list = () => readSettings().credentials || [];
-  const publicView = (c) => ({ id: c.id, name: c.name, username: c.username, auth: c.auth, keyPath: c.keyPath, hasEnable: !!c.hasEnable });
+  const publicView = (c) => ({ id: c.id, name: c.name, username: c.username, auth: c.auth, keyPath: c.keyPath, hasEnable: !!c.hasEnable, used: maps.countUse(c.id) });
 
   app.get('/api/credentials', (req, res) => res.json({ store: vault.label, persistent: vault.persistent, sets: list().map(publicView) }));
 
@@ -56,6 +57,7 @@ export function mountCredentials(app, readSettings, writeSettings) {
     if (!sets.some((c) => c.id === req.params.id)) return res.json({ ok: false, error: 'Not found.' });
     await vault.del(req.params.id);
     writeSettings({ credentials: sets.filter((c) => c.id !== req.params.id) });
+    maps.onDelete(req.params.id);
     res.json({ ok: true });
   });
 

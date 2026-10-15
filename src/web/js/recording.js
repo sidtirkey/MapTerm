@@ -1,6 +1,6 @@
 // Session recording: the REC button on each tab and Ctrl+Shift+L. The server writes the
 // cleaned-up log file; this module only starts and stops it and shows status lines.
-import { settings, askLogDir } from './settings.js';
+import { askLogDir } from './settings.js';
 import { activeId } from './sessions.js';
 
 export const isRecKey = (e) => e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && e.code === 'KeyL';
@@ -25,14 +25,25 @@ export function setRec(s, rec) {
   b.setAttribute('aria-label', rec ? 'Stop recording' : 'Start recording');
 }
 
-export async function toggleRec(s) {
+export function toggleRec(s) {
   if (s.rec === 'pending') return;
   if (s.rec) return s.out({ type: 'log-stop' });
   if (s.status !== 'live') return note(s, 'Recording starts once the session is connected.');
-  if (!settings.logDir && !(await askLogDir('Choose where session logs are saved. You only need to do this once.'))) return;
+  startRec(s);
+}
+
+// Recordings go to the log folder of the map the session's device is on.
+function startRec(s) {
   setRec(s, 'pending');
   // Seed the log with the line the cursor is on (normally the prompt).
   const b = s.term.buffer.active, line = b.getLine(b.baseY + b.cursorY);
-  s.out({ type: 'log-start', name: s.name, seed: line ? line.translateToString(true) : '', seedCol: b.cursorX });
+  s.out({ type: 'log-start', mapId: s.mapId, name: s.name, seed: line ? line.translateToString(true) : '', seedCol: b.cursorX });
   if (activeId === s.id) s.term.focus();
+}
+
+// The server said the map has no log folder yet: ask for one, then start recording.
+export async function chooseFolderAndRecord(s) {
+  const dir = await askLogDir(s.mapId, 'Choose where recordings from this map are saved. You only need to do this once per map.');
+  if (dir && s.status === 'live' && !s.rec) startRec(s);
+  else if (activeId === s.id) s.term.focus();
 }

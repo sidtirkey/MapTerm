@@ -1,18 +1,19 @@
-// The topology map: devices and links (Cytoscape), toolbar modes, saving, and the
-// device / link context menus.
+// The map: devices and links (Cytoscape), toolbar modes, saving, and the device / link
+// context menus. Which map is shown is managed by maps.js.
 import { $ } from './dom.js';
 import { DEVICE_TYPES, deviceIcon } from './icons.js';
 import { ask } from './dialog.js';
 import { startLinkDraw, endLinkDraw, askLink } from './links.js';
-import { connectNode, credCache } from './sessions.js';
+import { connectNode, credCache, refreshMap } from './sessions.js';
 import { credOptions } from './credentials.js';
 import { updatePickbar } from './run.js';
+import { currentMapId } from './maps.js';
 
 export let cy = null;
 export let mode = 'select';
 
 const hints = {
-  select: 'Click a device to open SSH. Drag to rearrange.',
+  select: 'Click a device to connect. Drag to rearrange.',
   add: 'Click empty space to place a device.',
   link: 'Click or release on the device to connect to. Esc or click empty space to cancel.',
   pick: 'Click devices to choose where the commands run, then Next.',
@@ -37,22 +38,47 @@ export const realNodes = () => cy.nodes().not('.ghost');
 const updateEmpty = () => { $('#empty').style.display = realNodes().length ? 'none' : 'flex'; };
 
 /* ---------- persistence (no credentials stored) ---------- */
-let saveT;
+// Changes are saved shortly after they happen, to the map that was open when they happened.
+let saveT, pendingSave = null;
 export function save() {
   updateEmpty(); clearTimeout(saveT);
-  saveT = setTimeout(() => {
+  const id = currentMapId();
+  pendingSave = () => {
+    pendingSave = null;
     const nodes = realNodes().map((n) => ({ ...n.data(), x: n.position('x'), y: n.position('y') }));
     const edges = cy.edges().not('.ghost').map((e) => ({ ...e.data() }));
-    fetch('/api/topology', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodes, edges }) }).catch(() => {});
-  }, 300);
+    return fetch(`/api/maps/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nodes, edges }) }).catch(() => {});
+  };
+  saveT = setTimeout(pendingSave, 300);
+}
+// Saves now if a save is waiting (before switching maps, exporting, ...).
+export function flushSave() { clearTimeout(saveT); return pendingSave ? pendingSave() : Promise.resolve(); }
+
+// Replaces what is on the map with the given map's devices and links.
+export function showMap(m) {
+  setMode('select');
+  cy.elements().remove();
+  m.nodes.forEach(({ x, y, ...d }) => cy.add({ group: 'nodes', data: d, position: { x, y } }));
+  m.edges.forEach((e) => cy.add({ group: 'edges', data: e }));
+  if (m.nodes.length) cy.fit(undefined, 60); else cy.reset();
+  updateEmpty();
+  refreshMap(); // devices with an open terminal tab are highlighted
 }
 
 /* ---------- device form ---------- */
+export const PROTOCOLS = { ssh: 'SSH', telnet: 'Telnet (unencrypted)' };
+const DEFAULT_PORT = { ssh: '22', telnet: '23' };
+export const protocolName = (d) => (d.protocol === 'telnet' ? 'Telnet' : 'SSH');
 const nodeFields = (d = {}) => [
   { key: 'name', label: 'Device name', value: d.name },
   { key: 'type', label: 'Device type', value: d.type, options: Object.fromEntries(Object.entries(DEVICE_TYPES).map(([k, t]) => [k, t.label])) },
   { key: 'host', label: 'IP address or hostname', value: d.host },
-  { key: 'port', label: 'SSH port', value: d.port || '22' },
+  // Switching protocol moves the port between the two defaults (a custom port is kept).
+  { key: 'protocol', label: 'Connect with', value: d.protocol || 'ssh', options: PROTOCOLS, onChange: (p, form) => {
+    const port = form.querySelector('[name=port]');
+    if (!port.value || Object.values(DEFAULT_PORT).includes(port.value)) port.value = DEFAULT_PORT[p];
+  } },
+  { key: 'port', label: 'Port', value: d.port || DEFAULT_PORT[d.protocol || 'ssh'] },
   { key: 'credId', label: 'Credentials', value: d.credId || '', options: { '': 'Ask when connecting', ...credOptions() } },
   { key: 'username', label: 'Username', value: d.username, showIf: ['credId', ''] },
 ];
@@ -81,7 +107,8 @@ const STYLE = [
   { selector: 'node', style: {
     shape: 'round-rectangle', width: 60, height: 60, 'background-opacity': 0, 'border-width': 0,
     'background-image': (n) => deviceIcon(n.data('type')), 'background-fit': 'contain', 'background-clip': 'none',
-    label: (n) => n.data('name') + '\n' + (n.data('host') || ''),
+    // Telnet devices are marked, since their sessions are not encrypted.
+    label: (n) => n.data('name') + '\n' + (n.data('host') || '') + (n.data('protocol') === 'telnet' ? ' · telnet' : ''),
     'text-wrap': 'wrap', 'text-valign': 'bottom', 'text-halign': 'center', 'text-margin-y': 4, 'font-size': 12,
     'text-background-color': '#eef1f4', 'text-background-opacity': 0.85, 'text-background-padding': 2, 'text-background-shape': 'round-rectangle',
     color: '#1b2430', 'font-family': 'Segoe UI, Helvetica, Arial, sans-serif', 'line-height': 1.3 } },
@@ -109,12 +136,6 @@ export function initMap() {
   $('#bAdd').onclick = () => setMode('add');
   setMode('select');
 
-  fetch('/api/topology').then((r) => r.json()).then((t) => {
-    t.nodes.forEach(({ x, y, ...d }) => cy.add({ group: 'nodes', data: d, position: { x, y } }));
-    t.edges.forEach((e) => cy.add({ group: 'edges', data: e }));
-    if (t.nodes.length) cy.fit(undefined, 60);
-    updateEmpty();
-  });
   cy.on('dragfree', 'node', save);
 
   cy.on('tap', async (evt) => {
@@ -133,7 +154,7 @@ export function initMap() {
     if (mode === 'pick') { n.toggleClass('chosen'); updatePickbar(); return; }
     if (mode !== 'select') return;
     showMenu(evt.renderedPosition, [
-      ['Open SSH', () => connectNode(n)],
+      [`Open ${protocolName(n.data())}`, () => connectNode(n)],
       ['Add link', () => startLinkDraw(n, evt.position)],
       ['Edit', async () => { const v = await ask('Edit device', nodeFields(n.data()), 'Save'); if (v && v.name) { n.data(splitHostPort(v)); credCache.delete(n.id()); save(); } }],
       ['Delete', () => { n.remove(); save(); }, 'danger'],
@@ -151,7 +172,7 @@ export function initMap() {
 
   // Delete / Backspace removes the selected devices and links (not while typing).
   document.addEventListener('keydown', (e) => {
-    if (e.target.closest('.xterm,input,select,textarea') || (e.key !== 'Delete' && e.key !== 'Backspace')) return;
+    if ((e.key !== 'Delete' && e.key !== 'Backspace') || e.target.closest?.('.xterm,input,select,textarea,#mapmenu')) return;
     cy.$(':selected').remove(); save();
   });
 }

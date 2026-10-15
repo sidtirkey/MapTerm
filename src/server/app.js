@@ -4,6 +4,7 @@ import path from 'node:path';
 import express from 'express';
 import { WEB_DIR, NODE_MODULES, readSettings, writeSettings } from './config.js';
 import { mountApi } from './api.js';
+import { mountMaps, countCredentialUse, forgetCredential } from './maps.js';
 import { mountCredentials } from './credentials.js';
 import { attachTerminalServer } from './terminal.js';
 
@@ -25,7 +26,8 @@ export function createServer() {
   app.use('/vendor/cy', express.static(path.join(NODE_MODULES, 'cytoscape/dist')));
 
   mountApi(app);
-  const resolveCreds = mountCredentials(app, readSettings, writeSettings);
+  mountMaps(app);
+  const resolveCreds = mountCredentials(app, readSettings, writeSettings, { countUse: countCredentialUse, onDelete: forgetCredential });
 
   const server = http.createServer(app);
   attachTerminalServer(server, { resolveCreds });

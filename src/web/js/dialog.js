@@ -5,6 +5,7 @@
 //   type: 'password' | options: { value: label } (a select) | textarea: true
 //   browse: (current) => Promise<{ path } | { error }>  adds a "Browse…" button
 //   showIf: [selectKey, value]  shows the field only while that select has that value
+//   onChange: (value, form) => …  runs when the field changes
 // note is a string or a DOM node shown above the fields.
 import { $ } from './dom.js';
 
@@ -46,6 +47,7 @@ export function ask(title, fields, okText = 'OK', note = '') {
       } else l.appendChild(i);
       box.appendChild(l);
       f.el = l;
+      if (f.onChange) i.addEventListener('change', () => f.onChange(i.value, box));
     });
     // showIf: [otherKey, value] shows a field only while that select has that value.
     fields.filter((f) => f.showIf).forEach((f) => {

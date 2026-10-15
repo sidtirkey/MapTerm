@@ -12,11 +12,13 @@
 <div id="app">
   <div id="bar">
     <b>MapTerm</b>
+    <button id="bMap" title="Switch, create, export or import maps" aria-haspopup="menu" aria-expanded="false"><span id="mapname"></span><i aria-hidden="true">▾</i></button>
+    <span class="sep" aria-hidden="true"></span>
     <button id="bSel" class="on">Select</button>
     <button id="bAdd">Add node</button>
     <button id="bRun" title="Run commands on several devices and save the output">Run commands</button>
     <button id="bCreds" title="Saved usernames, passwords, SSH keys and enable passwords">Credentials</button>
-    <button id="bLogs" title="Folder where session recordings are saved">Log folder</button>
+    <button id="bLogs" title="Folder where this map's session recordings are saved">Log folder</button>
     <span id="hint"></span>
   </div>
   <div id="stage">
@@ -34,6 +36,9 @@
     <div id="panes"></div>
   </div>
 </div>
+
+<div id="mapmenu" role="menu" aria-label="Maps"></div>
+<input type="file" id="mapfile" accept=".json,application/json" hidden>
 
 <div id="credmodal" role="dialog" aria-labelledby="credtitle"><div id="credbox"><h3 id="credtitle">Credentials</h3><p id="credstore"></p>
   <ul id="credlist"></ul><div id="credbtns"><button type="button" id="credClose">Done</button><button type="button" id="credAdd" class="ok">Add credential set</button></div></div></div>

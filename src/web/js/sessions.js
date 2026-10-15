@@ -1,10 +1,11 @@
-// SSH sessions: one terminal tab per device in the dock at the bottom, the tab strip
+// Terminal sessions (SSH or Telnet): one tab per device in the dock at the bottom, the tab strip
 // (drag to reorder) and the dock itself (minimise, resize).
 import { $, wsUrl } from './dom.js';
 import { ask } from './dialog.js';
-import { cy, save } from './map.js';
+import { cy, save, protocolName } from './map.js';
 import { credSet } from './credentials.js';
-import { note, setRec, toggleRec, isRecKey } from './recording.js';
+import { note, setRec, toggleRec, isRecKey, chooseFolderAndRecord } from './recording.js';
+import { currentMapId } from './maps.js';
 
 export const sessions = new Map();
 export const credCache = new Map(); // credentials typed into "SSH to …"; in memory only, cleared on reload
@@ -12,7 +13,7 @@ export let activeId = null;
 let seq = 0;
 const dock = $('#dock');
 
-function refreshMap() {
+export function refreshMap() {
   cy.nodes().removeClass('live focus');
   sessions.forEach((s) => { if (s.status === 'live') cy.getElementById(s.nodeId).addClass('live'); });
   if (activeId && sessions.has(activeId)) cy.getElementById(sessions.get(activeId).nodeId).addClass('focus');
@@ -36,6 +37,8 @@ export async function connectNode(n) {
   const d = n.data();
   if (credSet(d.credId)) return openSession(n, { credId: d.credId });
   let c = credCache.get(n.id());
+  // Telnet without saved credentials: connect, and the user logs in in the terminal.
+  if (!c && d.protocol === 'telnet') return openSession(n, {});
   if (!c) {
     const v = await ask(`SSH to ${d.name}`, [
       { key: 'username', label: 'Username', value: d.username },
@@ -63,7 +66,7 @@ function openSession(n, c) {
   const term = new Terminal({ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 14, cursorBlink: true, scrollback: 5000,
     theme: { background: '#12161c', foreground: '#d7dde6', cursor: '#7aa2ff', selectionBackground: '#33425e' } });
   const fit = new FitAddon.FitAddon(); term.loadAddon(fit);
-  const s = { id, nodeId: n.id(), name: d.name, tab, pane, term, fit, ws: null, status: 'connecting', rec: null };
+  const s = { id, nodeId: n.id(), mapId: currentMapId(), name: d.name, tab, pane, term, fit, ws: null, status: 'connecting', rec: null };
   setRec(s, null);
   sessions.set(id, s);
   pane.classList.add('active'); term.open(pane); fit.fit(); activate(id);
@@ -71,20 +74,21 @@ function openSession(n, c) {
   const ws = new WebSocket(wsUrl('/ssh'));
   s.ws = ws;
   const out = s.out = (t) => ws.readyState === 1 && ws.send(JSON.stringify(t));
-  term.writeln(`\x1b[90mConnecting to ${d.host}:${d.port || 22} ...\x1b[0m`);
+  const telnet = d.protocol === 'telnet';
+  term.writeln(`\x1b[90mConnecting to ${d.host}:${d.port || (telnet ? 23 : 22)} over ${protocolName(d)}${telnet ? ' (not encrypted)' : ''} ...\x1b[0m`);
 
-  ws.onopen = () => out({ type: 'connect', host: d.host, port: d.port, cols: term.cols, rows: term.rows, ...c });
+  ws.onopen = () => out({ type: 'connect', protocol: d.protocol || 'ssh', host: d.host, port: d.port, cols: term.cols, rows: term.rows, ...c });
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.type === 'ready') { setStatus(s, 'live'); term.focus(); }
     else if (m.type === 'data') term.write(m.data);
     else if (m.type === 'log' && m.on) { setRec(s, m.file); note(s, `● Recording to ${m.file}`); }
     else if (m.type === 'log') { setRec(s, null); note(s, `■ Recording saved: ${m.file}`); }
-    else if (m.type === 'log-error') { setRec(s, null); note(s, `Recording failed: ${m.message}`, 31); }
+    else if (m.type === 'log-error') { setRec(s, null); if (m.needFolder) chooseFolderAndRecord(s); else note(s, `Recording failed: ${m.message}`, 31); }
     else if (m.type === 'notice') note(s, m.message, m.level === 'warn' ? 33 : 90);
     else if (m.type === 'error') {
       term.writeln(`\r\n\x1b[31mConnection failed: ${m.message}\x1b[0m`);
-      if (/authentication/i.test(m.message)) { credCache.delete(n.id()); term.writeln('\x1b[90mSaved password cleared. Open SSH again to retry.\x1b[0m'); }
+      if (/authentication|login failed/i.test(m.message)) { credCache.delete(n.id()); term.writeln('\x1b[90mSaved password cleared. Connect again to retry.\x1b[0m'); }
       setStatus(s, 'dead');
     }
   };

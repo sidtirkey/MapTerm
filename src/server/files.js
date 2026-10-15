@@ -30,3 +30,17 @@ export function openUnique(dir, base, ext) {
 export function newLogFile(dir, name) {
   return openUnique(dir, `${safeName(name)}_${stamp(new Date(), '-', '_')}`, '.log');
 }
+
+// A folder the user typed or picked: must be absolute, is created if needed, must be writable.
+export function resolveDir(input, example) {
+  let dir = expandHome(String(input || '').trim());
+  if (!dir || !path.isAbsolute(dir)) return { error: `Enter a full folder path, e.g. ${example}` };
+  dir = path.resolve(dir);
+  try { fs.mkdirSync(dir, { recursive: true }); fs.accessSync(dir, fs.constants.W_OK); }
+  catch (e) { return { error: `Can't write to ${dir} (${e.code || e.message})` }; }
+  return { dir };
+}
+
+// A map name as a folder name: spaces are kept, characters no OS allows are replaced.
+export const folderName = (name) =>
+  String(name || '').replace(/[\\/:*?"<>|\x00-\x1f]+/g, '_').replace(/^[. ]+|[. ]+$/g, '').slice(0, 80) || 'Map';

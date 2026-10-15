@@ -1,9 +1,10 @@
 // "Run commands": choose devices on the map, enter commands, confirm changes, and follow
 // the run in the progress panel. The server does the work (src/server/batch.js).
-import { $, wsUrl, postJSON, plural, remembered } from './dom.js';
+import { $, wsUrl, getJSON, postJSON, plural, remembered } from './dom.js';
 import { ask } from './dialog.js';
 import { cy, setMode, realNodes } from './map.js';
-import { settings, pickFolder } from './settings.js';
+import { pickFolder } from './settings.js';
+import { currentMapId } from './maps.js';
 import { credOptions, credSet } from './credentials.js';
 import { credCache } from './sessions.js';
 import { classify } from './commands.js';
@@ -50,7 +51,8 @@ async function askRun() {
   const nodes = cy.nodes('.chosen');
   const about = `Runs on ${plural(nodes.length, 'device')}: ${nodes.map((n) => n.data('name')).join(', ')}`;
   const credChoices = { device: "Each device's own credentials", ...credOptions(), type: 'Type them in for this run' };
-  let v = { commands: lastCommands.get(), layout: lastLayout.get() || 'device', cred: lastCred.get() || 'device', runDir: settings.runDir || settings.defaultRunDir || '' };
+  const mapId = currentMapId(), map = await getJSON(`/api/maps/${mapId}`); // results go to this map's folder
+  let v = { commands: lastCommands.get(), layout: lastLayout.get() || 'device', cred: lastCred.get() || 'device', runDir: map.runDir || map.suggestRunDir };
   let note = about, typed = null;
   for (;;) {
     v = await ask('Run commands', [
@@ -62,9 +64,8 @@ async function askRun() {
     if (!v) return;
     const commands = v.commands.split('\n').map((c) => c.trimEnd()).filter((c) => c.trim());
     if (!commands.length) { note = `Enter at least one command.\n${about}`; continue; }
-    const r = await postJSON('/api/settings', { runDir: v.runDir }, 'PUT');
+    const r = await postJSON(`/api/maps/${mapId}`, { runDir: v.runDir }, 'PATCH');
     if (!r.ok) { note = `${r.error}\n${about}`; continue; }
-    settings.runDir = r.runDir;
 
     // Work out each device's credentials.
     if (v.cred === 'type') {
@@ -79,7 +80,7 @@ async function askRun() {
     }
     const devices = [], missing = [];
     nodes.forEach((n) => {
-      const d = n.data(), dev = { id: n.id(), name: d.name, host: d.host, port: d.port };
+      const d = n.data(), dev = { id: n.id(), name: d.name, protocol: d.protocol || 'ssh', host: d.host, port: d.port };
       if (v.cred === 'type') Object.assign(dev, { username: typed.username, password: typed.password, enable: typed.enable });
       else if (v.cred !== 'device') dev.credId = v.cred;
       else if (credSet(d.credId)) dev.credId = d.credId;
@@ -93,11 +94,11 @@ async function askRun() {
     if (!go) continue;
     lastCommands.set(v.commands); lastLayout.set(v.layout); lastCred.set(v.cred);
     setMode('select');
-    return startRun(devices, commands, v.layout, go.canary);
+    return startRun(mapId, devices, commands, v.layout, go.canary);
   }
 }
 
-function startRun(devices, commands, layout, canary) {
+function startRun(mapId, devices, commands, layout, canary) {
   const rows = {};
   $('#runlist').replaceChildren(...devices.map((d) => {
     const li = document.createElement('li');
@@ -121,7 +122,7 @@ function startRun(devices, commands, layout, canary) {
     $('#runOpen').style.display = r.dir ? '' : 'none';
   };
   const labels = { connecting: 'Connecting…', running: 'Logged in', done: 'Done', warn: 'Done', failed: 'Failed' };
-  ws.onopen = () => ws.send(JSON.stringify({ type: 'batch', devices, commands, layout, canary }));
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'batch', mapId, devices, commands, layout, canary }));
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.type === 'batch-started') {

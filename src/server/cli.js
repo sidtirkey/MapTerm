@@ -1,4 +1,5 @@
-// Reading a device's command line from its raw output: prompts, pagers and enable mode.
+// Reading a device's command line from its raw output: prompts, pagers, Telnet login and
+// enable mode.
 
 export const PROMPT_END = /[>#$%\]]$/;
 // Pagers: "--More--", " --More-- ", "---(more 45%)---", "  ---- More ----", "<--- More --->", "Press any key to continue"
@@ -65,4 +66,32 @@ export function firstPrompt(onPrompt, settleMs = 800, timeoutMs = 20000) {
   };
   feed.cancel = () => { fired = true; clearTimeout(timer); clearTimeout(settle); };
   return feed;
+}
+
+const USER_PROMPT = /(user ?name|login)\s*:$/i;
+const PASS_PROMPT = /password\s*:$/i;
+const LOGIN_DONE_SETTLE = 500;
+
+// Telnet has no login of its own: the device asks "Username:" / "login:" and "Password:" as
+// text. This answers each prompt once from the saved credentials. A prompt asked again means
+// the login was rejected, and fail(reason) is called instead of guessing. Once the device
+// shows a command prompt (and the output has gone quiet), it stops listening, so a later
+// "Password:" from "enable" is left to the enabler. Feed it every piece of output.
+export function loginResponder(write, { username = '', password = '' }, fail) {
+  let buf = '', sentUser = false, sentPass = false, done = false, settle = null;
+  return (text) => {
+    if (done) return;
+    buf = (buf + text).slice(-2048);
+    clearTimeout(settle);
+    const line = lastLine(buf);
+    if (USER_PROMPT.test(line)) {
+      if (sentUser || !username) { done = true; return fail(sentUser ? 'the login was rejected' : 'the device asked for a username and none is saved'); }
+      sentUser = true; buf = ''; write(username + '\r');
+    } else if (PASS_PROMPT.test(line)) {
+      if (sentPass || !password) { done = true; return fail(sentPass ? 'the login was rejected' : 'the device asked for a password and none is saved'); }
+      sentPass = true; buf = ''; write(password + '\r');
+    } else if (PROMPT_END.test(line)) {
+      settle = setTimeout(() => { done = true; }, LOGIN_DONE_SETTLE);
+    }
+  };
 }

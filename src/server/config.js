@@ -13,7 +13,7 @@ export const PORT = Number(process.env.PORT) || 3000;
 // Passwords pass through this server, so it only listens on this machine unless told otherwise.
 export const BIND = process.env.BIND || '127.0.0.1';
 
-// Per-user data (topology, settings, Windows secrets), outside the source tree:
+// Per-user data (maps, settings, Windows secrets), outside the source tree:
 //   macOS   ~/Library/Application Support/MapTerm
 //   Windows %APPDATA%\MapTerm
 //   Linux   $XDG_CONFIG_HOME/mapterm (usually ~/.config/mapterm)
@@ -26,7 +26,6 @@ function defaultDataDir() {
   return path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), 'mapterm');
 }
 export const DATA_DIR = defaultDataDir();
-export const TOPOLOGY_FILE = path.join(DATA_DIR, 'topology.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 export const DEFAULT_LOG_DIR = path.join(os.homedir(), 'MapTerm Logs');

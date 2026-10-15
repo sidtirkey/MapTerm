@@ -8,6 +8,9 @@ import path from 'node:path';
 
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mapterm-data-'));
 process.env.MAPTERM_DATA_DIR = dataDir; // must be set before the server modules load
+// The single topology.json of earlier versions; it should become the first map.
+const oldTopology = { nodes: [{ id: 'a', name: 'R1', x: 1, y: 2 }, { id: 'b', name: 'R2', x: 3, y: 4 }], edges: [{ id: 'e', source: 'a', target: 'b' }] };
+fs.writeFileSync(path.join(dataDir, 'topology.json'), JSON.stringify(oldTopology));
 const { createServer } = await import('../src/server/app.js');
 
 let server, base;
@@ -28,24 +31,67 @@ test('serves the page', async () => {
   assert.match(await res.text(), /<title>MapTerm<\/title>/);
 });
 
-test('saves the topology in the data folder', async () => {
-  assert.deepEqual(await (await call('/api/topology')).json(), { nodes: [], edges: [] });
-  const topo = { nodes: [{ id: 'a', name: 'R1', x: 1, y: 2 }], edges: [] };
-  assert.equal((await (await call('/api/topology', 'PUT', topo)).json()).ok, true);
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dataDir, 'topology.json'), 'utf8')), topo);
+const json = async (...a) => (await call(...a)).json();
+
+test('turns an earlier single topology into the first map', async () => {
+  const { current, maps } = await json('/api/maps');
+  assert.deepEqual(maps.map((m) => [m.name, m.devices]), [['My network', 2]]);
+  const m = await json(`/api/maps/${current}`);
+  assert.deepEqual({ nodes: m.nodes, edges: m.edges }, oldTopology);
+  assert.equal(fs.existsSync(path.join(dataDir, 'topology.json')), false);
 });
 
-test('validates folders before saving them', async () => {
-  const bad = await (await call('/api/settings', 'PUT', { logDir: 'relative/path' })).json();
-  assert.equal(bad.ok, false);
-  const dir = path.join(dataDir, 'logs');
-  const good = await (await call('/api/settings', 'PUT', { logDir: dir })).json();
-  assert.deepEqual(good, { ok: true, logDir: dir });
-  assert.equal((await (await call('/api/settings')).json()).logDir, dir);
+test('creates, saves, renames and deletes maps', async () => {
+  const lab = (await json('/api/maps', 'POST', { name: 'Lab' })).map;
+  assert.equal((await json('/api/maps', 'POST', { name: 'lab' })).ok, false, 'names are unique');
+  const topo = { nodes: [{ id: 'x', name: 'SW1', x: 0, y: 0 }], edges: [] };
+  assert.equal((await json(`/api/maps/${lab.id}`, 'PUT', topo)).ok, true);
+  assert.deepEqual((await json(`/api/maps/${lab.id}`)).nodes, topo.nodes);
+  assert.equal((await json(`/api/maps/${lab.id}`, 'PATCH', { name: 'Lab 2' })).ok, true);
+  await json(`/api/maps/${lab.id}/open`, 'POST', {});
+  assert.equal((await json('/api/maps')).current, lab.id, 'remembers the open map');
+  const del = await json(`/api/maps/${lab.id}`, 'DELETE');
+  assert.equal(del.ok, true);
+  assert.deepEqual(del.maps.map((m) => m.name), ['My network']);
+  const only = del.maps[0].id;
+  assert.equal((await json(`/api/maps/${only}`, 'DELETE')).ok, false, 'the last map cannot be deleted');
+});
+
+test('duplicates with fresh device ids and keeps links connected', async () => {
+  const { current } = await json('/api/maps');
+  const copy = (await json('/api/maps', 'POST', { name: 'Copy', from: current })).map;
+  const m = await json(`/api/maps/${copy.id}`);
+  assert.deepEqual(m.nodes.map((n) => n.name), ['R1', 'R2']);
+  assert.ok(m.nodes.every((n) => !['a', 'b'].includes(n.id)));
+  assert.deepEqual([m.edges[0].source, m.edges[0].target], m.nodes.map((n) => n.id));
+});
+
+test('imports a map file, dropping credential links from another machine', async () => {
+  const file = { nodes: [{ id: '1', name: 'FW', credId: 'c-from-elsewhere', x: 0, y: 0 }], edges: [] };
+  const map = (await json('/api/maps', 'POST', { name: 'Imported', ...file })).map;
+  assert.equal((await json(`/api/maps/${map.id}`)).nodes[0].credId, '');
+  assert.equal((await json('/api/maps', 'POST', { name: 'Bad', nodes: 'nope', edges: [] })).ok, false);
+});
+
+test('keeps a separate log and results folder per map', async () => {
+  const a = (await json('/api/maps', 'POST', { name: 'Site A' })).map;
+  const b = (await json('/api/maps', 'POST', { name: 'Site B' })).map;
+  const fresh = await json(`/api/maps/${a.id}`);
+  assert.equal(fresh.logDir, '', 'no folder until the user chooses one');
+  assert.equal(path.basename(fresh.suggestLogDir), 'Site A', 'suggests a folder named after the map');
+  assert.equal((await json(`/api/maps/${a.id}`, 'PATCH', { logDir: 'relative/path' })).ok, false);
+  const dirA = path.join(dataDir, 'logs-a'), dirB = path.join(dataDir, 'logs-b');
+  assert.equal((await json(`/api/maps/${a.id}`, 'PATCH', { logDir: dirA, runDir: dirA })).logDir, dirA);
+  assert.equal((await json(`/api/maps/${b.id}`, 'PATCH', { logDir: dirB })).logDir, dirB);
+  assert.ok(fs.existsSync(dirA) && fs.existsSync(dirB), 'folders are created');
+  assert.deepEqual([(await json(`/api/maps/${a.id}`)).logDir, (await json(`/api/maps/${b.id}`)).logDir], [dirA, dirB]);
+  // A copy starts without folders, so it never writes into the original's.
+  const copy = (await json('/api/maps', 'POST', { name: 'Site A copy', from: a.id })).map;
+  assert.deepEqual([(await json(`/api/maps/${copy.id}`)).logDir, (await json(`/api/maps/${copy.id}`)).runDir], ['', '']);
 });
 
 test('refuses API requests from other websites', async () => {
-  const res = await call('/api/settings', 'PUT', { logDir: '/tmp/x' }, { Origin: 'http://evil.example' });
+  const res = await call('/api/maps', 'POST', { name: 'Evil' }, { Origin: 'http://evil.example' });
   assert.equal(res.status, 403);
 });
 

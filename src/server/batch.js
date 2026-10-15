@@ -1,16 +1,15 @@
 // Runs a list of commands on several devices and saves each device's transcript to a file.
-// Commands go through one interactive shell per device (not one exec per command), so
+// Commands go through one interactive shell per device, over SSH or Telnet (not one exec per
+// command), so
 // sequences such as "conf t" / "interface ..." / "end" keep their context. A command is
 // treated as finished when the device's prompt comes back and the output goes quiet.
 import fs from 'node:fs';
 import path from 'node:path';
 import { StringDecoder } from 'node:string_decoder';
-import ssh2 from 'ssh2';
 import { SessionLog } from './session-log.js';
 import { stamp, safeName, openUnique } from './files.js';
 import { PROMPT_END, MORE, lastLine, enabler } from './cli.js';
-
-const { Client } = ssh2;
+import { openShell } from './shell.js';
 
 const PARALLEL = 8;              // devices worked on at once
 const LOGIN_TIMEOUT = 20000;     // to reach the first prompt
@@ -68,13 +67,12 @@ async function runDevice(d, ctx) {
     const perCommand = ctx.layout === 'command';
     const sink = perCommand ? new CommandFiles(runDir, d, commands.length) : new DeviceFile(runDir, d, auth?.username);
     const log = new SessionLog(sink);
-    const conn = new Client();
-    let finished = false, timer = null, settle = null, timedOut = 0;
+    let sh = null, ready = false, finished = false, timer = null, settle = null, timedOut = 0;
 
     const finish = (error) => {
       if (finished) return;
       finished = true;
-      clearTimeout(timer); clearTimeout(settle); conns.delete(conn); conn.end();
+      clearTimeout(timer); clearTimeout(settle); if (sh) { conns.delete(sh); sh.end(); }
       if (error && ctx.aborted) error = 'Stopped';
       const note = error ? '' : timedOut ? `${timedOut} command(s) got no prompt back within ${COMMAND_TIMEOUT / 1000}s` : '';
       // Per-command files end with their command's output (no trailing prompt), and only
@@ -87,14 +85,15 @@ async function runDevice(d, ctx) {
 
     if (authError) return finish(authError);
     if (ctx.aborted) return finish('Stopped');
-    conns.add(conn);
     status('connecting');
-
-    conn.on('keyboard-interactive', (n, i, l, prompts, cb) => cb(prompts.map(() => auth.password || '')));
-    conn.on('error', (e) => finish(e.message));
-    conn.on('close', () => finish('Connection closed before the commands finished'));
-    conn.on('ready', () => conn.shell({ term: 'vt100', cols: 511, rows: 100 }, (err, sh) => {
-      if (err) return finish(err.message);
+    // A wide terminal keeps devices from wrapping long output lines. Over Telnet the login
+    // prompts are answered by the shell (see shell.js); the prompt detection below starts
+    // once the device shows its command prompt.
+    sh = openShell({ protocol: d.protocol === 'telnet' ? 'telnet' : 'ssh', host: d.host, port: d.port, auth, cols: 511, rows: 100, term: 'vt100', algorithms });
+    conns.add(sh);
+    sh.on('error', (e) => finish(e.message));
+    sh.on('ready', () => {
+      ready = true;
       const dec = new StringDecoder('utf8');
       let i = -1, base = null, seen = '', sincePager = '', enabling = null;
       const arm = (ms, fn) => { clearTimeout(timer); timer = setTimeout(fn, ms); };
@@ -144,13 +143,8 @@ async function runDevice(d, ctx) {
       });
       // A last command such as "exit" may end the session on purpose.
       sh.on('close', () => finish(i >= commands.length - 1 && base !== null ? null : 'Session closed by the device'));
-    }));
-
-    conn.connect({
-      host: d.host, port: Number(d.port) || 22,
-      username: auth.username, password: auth.password, privateKey: auth.privateKey, passphrase: auth.passphrase,
-      tryKeyboard: !!auth.password, readyTimeout: 15000, keepaliveInterval: 15000, algorithms,
     });
+    sh.on('close', () => { if (!ready) finish('Connection closed before the commands finished'); });
   });
 }
 
