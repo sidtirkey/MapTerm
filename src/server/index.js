@@ -11,6 +11,8 @@ server.on('error', (e) => {
   process.exit(1);
 });
 server.listen(PORT, BIND, () => {
-  console.log(`MapTerm running at http://${BIND}:${PORT}`);
+  const host = BIND === '0.0.0.0' || BIND === '::' ? '127.0.0.1' : BIND;
+  console.log(`MapTerm running. Open this link (once per browser; it contains your access key):`);
+  console.log(`  http://${host}:${PORT}/?token=${server.accessKey}`);
   console.log(`Data folder: ${DATA_DIR}`);
 });

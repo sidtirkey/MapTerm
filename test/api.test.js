@@ -13,16 +13,19 @@ const oldTopology = { nodes: [{ id: 'a', name: 'R1', x: 1, y: 2 }, { id: 'b', na
 fs.writeFileSync(path.join(dataDir, 'topology.json'), JSON.stringify(oldTopology));
 const { createServer } = await import('../src/server/app.js');
 
-let server, base;
+let server, base, cookie;
 before(async () => {
   server = createServer();
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${server.address().port}`;
+  // Sign in the way a browser does: open the access link once and keep the cookie it sets.
+  const res = await fetch(`${base}/?token=${server.accessKey}`, { redirect: 'manual' });
+  cookie = res.headers.get('set-cookie').split(';')[0];
 });
 after(() => { server.close(); fs.rmSync(dataDir, { recursive: true, force: true }); });
 
 const call = (url, method = 'GET', body, headers = {}) => fetch(base + url, {
-  method, headers: { 'Content-Type': 'application/json', ...headers }, body: body && JSON.stringify(body),
+  method, headers: { 'Content-Type': 'application/json', Cookie: cookie, ...headers }, body: body && JSON.stringify(body),
 });
 
 test('serves the page', async () => {
@@ -103,6 +106,7 @@ test('never sends secrets back from the credentials API', async () => {
 
 test('discovers neighbors over the /ssh WebSocket', async () => {
   const { WebSocket } = await import('ws');
+  const sock = () => new WebSocket(base.replace('http', 'ws') + '/ssh', { headers: { Cookie: cookie } });
   const { fakeTelnetDevice, closeFakeDevices } = await import('./helpers/fake-telnet-device.js');
   const cdp = fs.readFileSync(new URL('./fixtures/neighbors/nxos-cdp-detail.txt', import.meta.url), 'utf8').trimEnd();
   const port = await fakeTelnetDevice({ name: 'N9K-1', responses: { 'terminal length 0': '', 'show cdp neighbors detail': cdp, 'show lldp neighbors detail': '% LLDP is not enabled' } });
@@ -112,7 +116,7 @@ test('discovers neighbors over the /ssh WebSocket', async () => {
     { id: 'ssh', name: 'R1', protocol: 'ssh', host: '127.0.0.1', port: 1, x: 0, y: 0 },
   ], edges: [] });
   const discover = (nodeId) => new Promise((resolve) => {
-    const ws = new WebSocket(base.replace('http', 'ws') + '/ssh'), statuses = [];
+    const ws = sock(), statuses = [];
     ws.on('open', () => ws.send(JSON.stringify({ type: 'discover', mapId: map.id, nodeId })));
     ws.on('message', (raw) => { const m = JSON.parse(raw); if (m.type === 'discover-status') statuses.push(m.state); if (m.type === 'discover-result') { ws.close(); resolve({ ...m, statuses }); } });
   });
@@ -128,12 +132,13 @@ test('discovers neighbors over the /ssh WebSocket', async () => {
 
 test('allows a second terminal session to the same device only when asked to', async () => {
   const { WebSocket } = await import('ws');
+  const sock = () => new WebSocket(base.replace('http', 'ws') + '/ssh', { headers: { Cookie: cookie } });
   const { fakeTelnetDevice, closeFakeDevices } = await import('./helpers/fake-telnet-device.js');
   const port = await fakeTelnetDevice({ name: 'SW9' });
   const device = { protocol: 'telnet', host: '127.0.0.1', port, name: 'SW9' };
   // Opens a terminal session; resolves to the first message that says how it went.
   const open = (extra = {}) => new Promise((resolve) => {
-    const ws = new WebSocket(base.replace('http', 'ws') + '/ssh');
+    const ws = sock();
     ws.on('open', () => ws.send(JSON.stringify({ type: 'connect', cols: 80, rows: 24, ...device, ...extra })));
     ws.on('message', (raw) => { const m = JSON.parse(raw); if (m.type === 'ready' || m.type === 'busy') resolve({ ws, type: m.type, names: m.names }); });
   });
@@ -151,4 +156,36 @@ test('allows a second terminal session to the same device only when asked to', a
   await new Promise((r) => setTimeout(r, 200));
   assert.deepEqual(await openNow(), [], 'closed sessions are forgotten');
   closeFakeDevices();
+});
+
+/* ---------- access key ---------- */
+
+test('without the access key the API and the WebSocket refuse to work', async () => {
+  const res = await fetch(base + '/api/maps');
+  assert.equal(res.status, 401);
+  assert.equal((await res.json()).signin, true);
+  const { WebSocket } = await import('ws');
+  const refused = await new Promise((resolve) => {
+    const ws = new WebSocket(base.replace('http', 'ws') + '/ssh');
+    ws.on('open', () => resolve(false));
+    ws.on('error', () => resolve(true));
+  });
+  assert.equal(refused, true, 'a WebSocket without the key is refused');
+  const wrong = await fetch(`${base}/?token=not-the-key`, { redirect: 'manual' });
+  assert.equal(wrong.headers.get('set-cookie'), null, 'a wrong key gets no cookie');
+});
+
+test('the access link sets a cookie page scripts and other sites cannot use, then hides the key', async () => {
+  const res = await fetch(`${base}/?token=${server.accessKey}`, { redirect: 'manual' });
+  assert.equal(res.status, 303);
+  assert.equal(res.headers.get('location'), '/', 'the key is dropped from the address bar');
+  assert.match(res.headers.get('set-cookie'), /HttpOnly/);
+  assert.match(res.headers.get('set-cookie'), /SameSite=Strict/);
+  assert.match(res.headers.get('set-cookie'), new RegExp(`^mapterm-${server.address().port}=`), 'one cookie per port');
+});
+
+test('the access key is kept in a file only this user can read', { skip: process.platform === 'win32' && 'Windows uses folder ACLs' }, () => {
+  const file = path.join(dataDir, 'access.key');
+  assert.equal(fs.readFileSync(file, 'utf8').trim(), server.accessKey);
+  assert.equal(fs.statSync(file).mode & 0o077, 0);
 });

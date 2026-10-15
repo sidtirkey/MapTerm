@@ -23,6 +23,7 @@ import { stamp, newLogFile } from './files.js';
 import { enabler, firstPrompt } from './cli.js';
 import { runBatch } from './batch.js';
 import { openShell, DEFAULT_PORT } from './shell.js';
+import { hasAccess } from './access.js';
 
 // Open terminal sessions by device address and port, across every MapTerm window and tab, so a
 // second login to a device happens only when the user asks for it (devices accept just a few
@@ -39,14 +40,15 @@ export function mountTerminalApi(app) {
   });
 }
 
-export function attachTerminalServer(server, { resolveCreds }) {
+export function attachTerminalServer(server, { resolveCreds, accessKey }) {
   const wss = new WebSocketServer({
     server,
     path: '/ssh',
     // Block pages from other origins from opening SSH sessions through this server.
+    // Only MapTerm's own page: the same origin (when a browser sends one) and the access key.
     verifyClient: ({ origin, req }) => {
-      if (!origin) return true;
-      try { return new URL(origin).host === req.headers.host; } catch { return false; }
+      try { if (origin && new URL(origin).host !== req.headers.host) return false; } catch { return false; }
+      return hasAccess(req, accessKey);
     },
   });
   wss.on('connection', (ws) => handleConnection(ws, resolveCreds));

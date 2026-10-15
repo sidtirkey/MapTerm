@@ -13,7 +13,7 @@ const PREFERRED_PORT = 47321;
 // Keep Chromium's own files (cache, local storage) in a subfolder, away from MapTerm's data.
 app.setPath('userData', path.join(DATA_DIR, 'window'));
 
-let win = null, origin = null;
+let win = null, origin = null, key = null;
 
 function listen(server, port) {
   return new Promise((resolve, reject) => {
@@ -35,11 +35,14 @@ async function startServer() {
       return error ? { ok: false, error } : { ok: true };
     },
   });
+  // Resolves to the port and the access key the window's first page load hands to it.
+  const server = createServer();
   try {
-    return await listen(createServer(), PREFERRED_PORT);
+    return { port: await listen(server, PREFERRED_PORT), key: server.accessKey };
   } catch (e) {
     if (e.code !== 'EADDRINUSE') throw e;
-    return listen(createServer(), 0);
+    const fallback = createServer();
+    return { port: await listen(fallback, 0), key: fallback.accessKey };
   }
 }
 
@@ -50,7 +53,7 @@ function createWindow() {
     webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
   });
   win.once('ready-to-show', () => win.show());
-  win.loadURL(origin + '/');
+  win.loadURL(`${origin}/?token=${key}`); // sets the access cookie, then shows the page
 
   // The window only ever shows MapTerm; links to other sites open in the default browser.
   const external = (url) => { if (/^https?:\/\//.test(url)) shell.openExternal(url); };
@@ -80,7 +83,8 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     try {
-      origin = `http://127.0.0.1:${await startServer()}`;
+      const started = await startServer();
+      origin = `http://127.0.0.1:${started.port}`; key = started.key;
     } catch (e) {
       dialog.showErrorBox('MapTerm could not start', e.message);
       return app.quit();

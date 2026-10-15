@@ -96,9 +96,11 @@ Requires [Node.js](https://nodejs.org) 18 or newer, on macOS, Windows or Linux.
 
 ```bash
 npm install
-npm start          # in your browser at http://127.0.0.1:3000
+npm start          # in your browser: open the link it prints (http://127.0.0.1:3000/?token=…)
 npm run app        # or as the desktop app
 ```
+
+The link carries MapTerm's access key; you need it once per browser (see [Security](#security)).
 
 On a Linux desktop, install `zenity` (or use KDE's `kdialog`) for the folder chooser, and
 `libsecret-tools` to keep passwords in the system keyring. Without them MapTerm still works:
@@ -121,8 +123,8 @@ MapTerm keeps your maps and settings in a per-user folder, separate from the cod
 | Linux | `~/.config/mapterm` |
 
 It contains `maps/` (one `.json` file per map: devices, links, and the map's log and results
-folders), `settings.json` (credential set names, the map last opened) and, on Windows,
-`secrets.dpapi.json` (encrypted passwords). Passwords themselves are stored by the operating
+folders), `settings.json` (credential set names, the map last opened), `access.key` (see
+[Security](#security)) and, on Windows, `secrets.dpapi.json` (encrypted passwords). Passwords themselves are stored by the operating
 system:
 
 | OS | Password store |
@@ -136,9 +138,18 @@ Session recordings and command results go to folders you choose per map in the a
 ## Security
 
 MapTerm handles device passwords, so by default it only accepts connections from this
-computer (`127.0.0.1`), and its API and terminal connections refuse requests from other
-websites. Only set `BIND` to another address on a network you trust: MapTerm has no login of
-its own, so anyone who can reach it can use your saved credentials.
+computer (`127.0.0.1`). Its API and terminal connections also require an **access key**, so
+that other programs and other users on the computer can't use your saved credentials:
+
+- The key is random and kept in `access.key` in the data folder, readable only by your user
+  account. Delete the file to make a new one (every browser then needs the new link).
+- `npm start` prints a link containing it; opening that link once stores the key in the
+  browser as an HttpOnly, SameSite=Strict cookie (page scripts can't read it, other websites
+  can't send it) and removes it from the address bar. The desktop app does this by itself.
+- Requests from other websites are refused as well.
+
+Only set `BIND` to another address on a network you trust: anyone with the access link can use
+MapTerm, and so your saved credentials.
 
 Telnet sends passwords and everything else unencrypted over the network; use it only where SSH
 is not available, ideally on a management network. Neighbor discovery only runs read-only

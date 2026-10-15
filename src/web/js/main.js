@@ -11,6 +11,13 @@ import { initRun, runInProgress } from './run.js';
 import { initMaps, mapMenuOpen, closeMapMenu } from './maps.js';
 import { initDiscovery, discoveryOpen, closeDiscovery } from './discover.js';
 
+// Without MapTerm's access key (see src/server/access.js) nothing else would work: explain how
+// to open it properly instead.
+if ((await fetch('/api/maps')).status === 401) {
+  $('#signin').hidden = false;
+  throw new Error('MapTerm: open it from its access link');
+}
+
 initMap();
 initLinks();
 initSessions();

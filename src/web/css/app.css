@@ -152,3 +152,11 @@ html,body{height:100%;margin:0;font-family:var(--sans);color:var(--ink);backgrou
 #toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 #disclist .choice{margin-top:6px}
 #disclist .sub.warn{color:#a15c00;white-space:normal}
+
+/* shown when the page was opened without MapTerm's access link */
+#signin{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--paper)}
+#signin[hidden]{display:none}
+#signin>div{max-width:560px;padding:28px;background:#fff;border:1px solid var(--grid);border-radius:10px;box-shadow:0 12px 40px rgba(20,30,45,.12)}
+#signin h2{margin:0 0 10px;font-size:20px}
+#signin p{margin:0 0 12px;font-size:15px;line-height:1.5;color:var(--ink)}
+#signin pre{margin:0 0 12px;padding:10px 12px;background:#f3f5f8;border-radius:6px;font-family:var(--mono);font-size:14px;overflow:auto}
