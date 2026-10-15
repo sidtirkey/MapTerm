@@ -4,7 +4,7 @@
 import { $, wsUrl } from './dom.js';
 import { ask } from './dialog.js';
 import { DEVICE_TYPES } from './icons.js';
-import { cy, save, flushSave, uid, realNodes, splitHostPort, protocolName } from './map.js';
+import { cy, save, flushSave, uid, realNodes, splitHostPort, protocolName, fitView } from './map.js';
 import { ifInUse } from './links.js';
 import { credCache } from './sessions.js';
 import { credSet } from './credentials.js';
@@ -165,7 +165,7 @@ function updateCount() {
   $('#discAdd').textContent = devices.length ? `Add ${plural(devices.length, 'device')}` : 'Add links';
 }
 
-// Positions for new devices: a fan around the source device, 45° apart and pointing away from
+// Positions for new devices: a fan around the source device, 60° apart and pointing away from
 // the rest of the map (so new devices and their links don't run through existing ones), each
 // pushed outwards until it keeps clear of every device already there.
 function placeAround(source, count) {
@@ -175,20 +175,20 @@ function placeAround(source, count) {
     const mx = rest.reduce((t, n) => t + n.position('x'), 0) / rest.length, my = rest.reduce((t, n) => t + n.position('y'), 0) / rest.length;
     if (Math.hypot(c.x - mx, c.y - my) > 1) dir = Math.atan2(c.y - my, c.x - mx);
   }
-  const step = Math.PI / 4, spread = Math.min(Math.PI * 1.7, step * (count - 1));
+  const step = Math.PI / 3, spread = Math.min(Math.PI * 1.7, step * (count - 1));
   const taken = realNodes().map((n) => n.position());
   const clear = (p) => taken.every((q) => Math.hypot(p.x - q.x, p.y - q.y) > 130);
   const spots = [];
   for (let k = 0; k < count; k++) {
     const a = dir - spread / 2 + (count > 1 ? (spread * k) / (count - 1) : 0);
     let spot = null;
-    for (let r = 240; !spot && r < 1600; r += 80) {
+    for (let r = 280; !spot && r < 1600; r += 80) {
       for (const nudge of [0, 0.15, -0.15, 0.3, -0.3]) {
         const p = { x: c.x + r * Math.cos(a + nudge), y: c.y + r * Math.sin(a + nudge) };
         if (clear(p)) { spot = p; break; }
       }
     }
-    spot ||= { x: c.x + 240, y: c.y + k * 130 };
+    spot ||= { x: c.x + 280, y: c.y + k * 130 };
     taken.push(spot); spots.push(spot);
   }
   return spots;
@@ -228,7 +228,7 @@ function addChosen() {
     const fresh = cy.collection(added);
     fresh.addClass('fresh');
     setTimeout(() => fresh.removeClass('fresh'), 3000);
-    cy.animate({ fit: { eles: cy.nodes(), padding: 60 } }, { duration: 500 });
+    fitView(cy.elements(), { animate: true });
   }
   const what = [added.length && plural(added.length, 'device'), links && plural(links, 'link')].filter(Boolean).join(' and ') || 'Nothing';
   toast(`${what} added from ${s.name}'s neighbors`

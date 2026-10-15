@@ -55,13 +55,24 @@ export function save() {
 // Saves now if a save is waiting (before switching maps, exporting, ...).
 export function flushSave() { clearTimeout(saveT); return pendingSave ? pendingSave() : Promise.resolve(); }
 
+// Fits the map (or some devices) into view without zooming in past 125%, so a map with only a
+// few devices doesn't show them huge.
+const MAX_FIT_ZOOM = 1.25;
+export function fitView(eles = cy.elements(), { padding = 60, animate = false } = {}) {
+  if (!eles.length) return cy.reset();
+  const bb = eles.boundingBox(), w = cy.width() - 2 * padding, h = cy.height() - 2 * padding;
+  const zoom = Math.min(MAX_FIT_ZOOM, cy.maxZoom(), Math.max(cy.minZoom(), Math.min(w / (bb.w || 1), h / (bb.h || 1))));
+  const pan = { x: cy.width() / 2 - zoom * (bb.x1 + bb.w / 2), y: cy.height() / 2 - zoom * (bb.y1 + bb.h / 2) };
+  if (animate) cy.animate({ zoom, pan }, { duration: 500 }); else cy.viewport({ zoom, pan });
+}
+
 // Replaces what is on the map with the given map's devices and links.
 export function showMap(m) {
   setMode('select');
   cy.elements().remove();
   m.nodes.forEach(({ x, y, ...d }) => cy.add({ group: 'nodes', data: d, position: { x, y } }));
   m.edges.forEach((e) => cy.add({ group: 'edges', data: e }));
-  if (m.nodes.length) cy.fit(undefined, 60); else cy.reset();
+  fitView();
   updateEmpty();
   refreshMap(); // devices with an open terminal tab are highlighted
 }
