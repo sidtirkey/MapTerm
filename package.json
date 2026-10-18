@@ -1,6 +1,6 @@
 {
   "name": "mapterm",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Network topology map you work from: SSH terminals, session recording and guarded multi-device commands",
   "license": "Apache-2.0",
   "author": "Siddharth Kumar Tirkey",
